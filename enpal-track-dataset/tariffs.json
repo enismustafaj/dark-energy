@@ -1,0 +1,21 @@
+[
+  {
+    "tariff_id": "dynamic",
+    "name": "Enpal FlexStrom Dynamic",
+    "type": "dynamic_hourly",
+    "description": "Hourly day-ahead spot price plus fixed network & levy adder. Price varies every hour.",
+    "spot_adder_eur_per_kwh": 0.119,
+    "base_fee_eur_per_month": 12.9,
+    "feed_in_eur_per_kwh": 0.081,
+    "price_source": "dynamic_prices.json (add spot_adder to get retail price)"
+  },
+  {
+    "tariff_id": "fixed",
+    "name": "Enpal FixStrom 24",
+    "type": "fixed_rate",
+    "description": "Flat per-kWh rate locked for 24 months. Simple and predictable.",
+    "energy_rate_eur_per_kwh": 0.349,
+    "base_fee_eur_per_month": 11.5,
+    "feed_in_eur_per_kwh": 0.081
+  }
+]

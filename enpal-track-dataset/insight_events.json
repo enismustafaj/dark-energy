@@ -1,0 +1,101 @@
+[
+  {
+    "household_id": "HH-1001",
+    "type": "anomaly",
+    "severity": "high",
+    "period": "2025-02-10..2025-02-17",
+    "title": "Heat pump consumed ~60% more than usual",
+    "detail": "Sustained elevated heat-pump electricity use over 8 days, beyond what outdoor temperature explains. Possible defrost fault, low refrigerant, or thermostat misconfiguration.",
+    "suggested_action": "Check heat pump settings / book a service inspection."
+  },
+  {
+    "household_id": "HH-1001",
+    "type": "nudge",
+    "severity": "info",
+    "period": "recurring",
+    "title": "Cheapest power is around 13:00",
+    "detail": "Over the last week the lowest average price was at 13:00 (~EUR 0.379/kWh). Shift flexible loads (EV, dishwasher, laundry) into this window.",
+    "suggested_action": "Schedule EV charging and appliances overnight."
+  },
+  {
+    "household_id": "HH-1001",
+    "type": "insight",
+    "severity": "info",
+    "period": "2025-08",
+    "title": "Highest bill in 2025-08",
+    "detail": "2025-08 cost EUR 221.65 vs your low of EUR 71.29 in 2025-03, driven by heating demand and lower solar.",
+    "suggested_action": "Pre-heat during cheap/sunny hours; review winter heating schedule."
+  },
+  {
+    "household_id": "HH-1002",
+    "type": "anomaly",
+    "severity": "high",
+    "period": "2025-02-05..2025-02-12",
+    "title": "Heat pump consumed ~60% more than usual",
+    "detail": "Sustained elevated heat-pump electricity use over 8 days, beyond what outdoor temperature explains. Possible defrost fault, low refrigerant, or thermostat misconfiguration.",
+    "suggested_action": "Check heat pump settings / book a service inspection."
+  },
+  {
+    "household_id": "HH-1002",
+    "type": "nudge",
+    "severity": "info",
+    "period": "recurring",
+    "title": "Cheapest power is around 13:00",
+    "detail": "Over the last week the lowest average price was at 13:00 (~EUR 0.379/kWh). Shift flexible loads (EV, dishwasher, laundry) into this window.",
+    "suggested_action": "Schedule EV charging and appliances overnight."
+  },
+  {
+    "household_id": "HH-1002",
+    "type": "insight",
+    "severity": "info",
+    "period": "2025-08",
+    "title": "Highest bill in 2025-08",
+    "detail": "2025-08 cost EUR 142.90 vs your low of EUR 13.34 in 2025-03, driven by heating demand and lower solar.",
+    "suggested_action": "Pre-heat during cheap/sunny hours; review winter heating schedule."
+  },
+  {
+    "household_id": "HH-1003",
+    "type": "anomaly",
+    "severity": "high",
+    "period": "2025-01-26..2025-02-02",
+    "title": "Heat pump consumed ~60% more than usual",
+    "detail": "Sustained elevated heat-pump electricity use over 8 days, beyond what outdoor temperature explains. Possible defrost fault, low refrigerant, or thermostat misconfiguration.",
+    "suggested_action": "Check heat pump settings / book a service inspection."
+  },
+  {
+    "household_id": "HH-1003",
+    "type": "nudge",
+    "severity": "info",
+    "period": "recurring",
+    "title": "Cheapest power is around 00:00",
+    "detail": "Over the last week the lowest average price was at 00:00 (~EUR 0.349/kWh). Shift flexible loads (EV, dishwasher, laundry) into this window.",
+    "suggested_action": "Schedule EV charging and appliances overnight."
+  },
+  {
+    "household_id": "HH-1003",
+    "type": "insight",
+    "severity": "info",
+    "period": "2025-08",
+    "title": "Highest bill in 2025-08",
+    "detail": "2025-08 cost EUR 216.48 vs your low of EUR 41.70 in 2025-04, driven by heating demand and lower solar.",
+    "suggested_action": "Pre-heat during cheap/sunny hours; review winter heating schedule."
+  },
+  {
+    "household_id": "HH-1004",
+    "type": "nudge",
+    "severity": "info",
+    "period": "recurring",
+    "title": "Cheapest power is around 13:00",
+    "detail": "Over the last week the lowest average price was at 13:00 (~EUR 0.379/kWh). Shift flexible loads (EV, dishwasher, laundry) into this window.",
+    "suggested_action": "Schedule EV charging and appliances overnight."
+  },
+  {
+    "household_id": "HH-1004",
+    "type": "insight",
+    "severity": "info",
+    "period": "2025-12",
+    "title": "Highest bill in 2025-12",
+    "detail": "2025-12 cost EUR 94.36 vs your low of EUR -1.48 in 2025-07, driven by heating demand and lower solar.",
+    "suggested_action": "Pre-heat during cheap/sunny hours; review winter heating schedule."
+  }
+]

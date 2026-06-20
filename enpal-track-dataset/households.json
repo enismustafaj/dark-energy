@@ -1,0 +1,54 @@
+[
+  {
+    "household_id": "HH-1001",
+    "name": "Familie Becker",
+    "city": "Munich",
+    "residents": 4,
+    "pv_kwp": 9.8,
+    "battery_kwh": 10.0,
+    "battery_power_kw": 5.0,
+    "heat_pump": true,
+    "ev_charger": true,
+    "tariff_id": "dynamic",
+    "timeseries_file": "energy_timeseries_HH-1001.json"
+  },
+  {
+    "household_id": "HH-1002",
+    "name": "Familie Schmidt",
+    "city": "Hamburg",
+    "residents": 3,
+    "pv_kwp": 6.4,
+    "battery_kwh": 7.7,
+    "battery_power_kw": 4.0,
+    "heat_pump": true,
+    "ev_charger": false,
+    "tariff_id": "dynamic",
+    "timeseries_file": "energy_timeseries_HH-1002.json"
+  },
+  {
+    "household_id": "HH-1003",
+    "name": "Familie Yilmaz",
+    "city": "Cologne",
+    "residents": 5,
+    "pv_kwp": 12.2,
+    "battery_kwh": 15.0,
+    "battery_power_kw": 7.5,
+    "heat_pump": true,
+    "ev_charger": true,
+    "tariff_id": "fixed",
+    "timeseries_file": "energy_timeseries_HH-1003.json"
+  },
+  {
+    "household_id": "HH-1004",
+    "name": "WG Sonnenallee",
+    "city": "Berlin",
+    "residents": 2,
+    "pv_kwp": 4.6,
+    "battery_kwh": 0.0,
+    "battery_power_kw": 0.0,
+    "heat_pump": false,
+    "ev_charger": false,
+    "tariff_id": "dynamic",
+    "timeseries_file": "energy_timeseries_HH-1004.json"
+  }
+]
