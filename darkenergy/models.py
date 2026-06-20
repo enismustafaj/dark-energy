@@ -125,6 +125,8 @@ class Fact(BaseModel):
     key: str
     household_id: str
     type: Literal["anomaly", "nudge", "insight"] = "insight"
+    category: Literal["fault", "contract", "device_choice", "utilization"] = "fault"
+    device_id: int | None = None
     severity: Literal["info", "warning", "high"] = "info"
     period: str = ""
     title: str = ""
@@ -132,6 +134,32 @@ class Fact(BaseModel):
     numbers: dict[str, float | int | str] = Field(default_factory=dict)
     template_id: str = ""
     suggested_action_key: str | None = None
+
+
+class Advice(BaseModel):
+    """What a rule recommends, with the counterfactually re-evaluated cost.
+
+    ``benefit_eur`` is the annualized customer cost benefit used for ranking."""
+
+    description: str = ""
+    baseline_cost_eur: float | None = None
+    counterfactual_cost_eur: float | None = None
+    benefit_eur: float = 0.0
+    capex_eur: float | None = None
+    payback_years: float | None = None
+    catalog_ref: str | None = None
+    action_key: str | None = None
+
+
+class RuleResult(BaseModel):
+    """A fired rule: a grounded Fact plus its optional Advice."""
+
+    fact: Fact
+    advice: Advice | None = None
+
+    @property
+    def benefit_eur(self) -> float:
+        return self.advice.benefit_eur if self.advice else 0.0
 
 
 class FactBundle(BaseModel):

@@ -46,12 +46,16 @@ def build_user_prompt(bundle: FactBundle) -> str:
 # A minus sign only counts when not preceded by a digit (so "2025-08" yields
 # 2025 and 8, not 2025 and -8 — the hyphen is a date separator there).
 _NUM_RE = re.compile(r"(?<!\d)-?\d+(?:[.,]\d+)?")
+# Clock times "HH:MM" — the minutes are a time separator, not a standalone number.
+_CLOCK_RE = re.compile(r"(\d{1,2}):\d{2}")
 
 
 def _numbers_in(text: str) -> set[str]:
     """Normalised numeric tokens found in free text (commas → dots, trim zeros)."""
+    # Collapse clock times to just the hour so "13:00" → "13", not "13" and "0".
+    text = _CLOCK_RE.sub(r"\1", text or "")
     found = set()
-    for tok in _NUM_RE.findall(text or ""):
+    for tok in _NUM_RE.findall(text):
         norm = tok.replace(",", ".")
         try:
             found.add(_canon(float(norm)))

@@ -10,6 +10,55 @@
 
 ---
 
+## 0. Iteration 2 — Rule engine, devices, advice (current)
+
+The intelligence core is now a **rule engine** over ETL metrics. Insights are
+produced by a ruleset grouped into four categories; each rule is specific to a
+part of the device set, has its own evaluation logic, and may attach an
+**advice** whose cost is **re-evaluated by counterfactual replay** over the
+household's real telemetry. Advice is ranked by annual customer cost benefit.
+
+- **Devices table** (`devices`) is the canonical record of what a household owns
+  (seeded from the richer contract asset specs), replacing `assets_json`.
+- **Qualified-appliance catalog** (`enpal-track-dataset/qualified_appliances.json`
+  → `appliance_catalog`) backs device-choice advice (efficiency/capacity/capex).
+- **Counterfactual cost engine** (`analytics/costing.py` `replay_cost`) re-prices
+  the year's real grid imports/exports under a rule's modified assumption.
+- **Star-diagram dashboard**: household hub at centre, device + contract nodes
+  radially; top-5 advice by benefit by default; click a node to filter advice to
+  that device (or the contract). `GET /api/advice/{hh}?device_id=&category=`.
+
+**Rule categories & rules** (`darkenergy/rules/`):
+| Category | Rules | Counterfactual |
+|---|---|---|
+| `contract` | `tariff_fit` | reprice year under each alternative tariff |
+| `device_choice` | `heatpump_upgrade`, `add_battery`, `battery_upsize` | SCOP-scaled load; battery dispatch (neutralizing the recorded battery for upsize) |
+| `utilization` | `battery_grid_support`, `ev_v2h`, `cheapest_window` | price-aware battery/EV dispatch vs recorded |
+| `fault` | `heatpump_overconsumption` (→ maintenance), `high_baseload`, `bill_spike` | none (ranked by severity) |
+
+The four anomaly detectors from iteration 1 are **re-homed** as `fault` rules
+(`rules/fault.py` wraps the still-tested `analytics/anomalies.py` functions).
+`anomalies.detect_all` is superseded by `rules.run_rules`. Test scenarios in
+`tests/test_rules.py` are the iteration surface — benefits asserted
+directionally (sign/ranking/household), not exact euros.
+
+**Honest modeling note:** the bundled homes already operate their batteries
+near-optimally, so `battery_upsize` / `battery_grid_support` correctly **do not
+fire** (no positive marginal benefit) — the engine reflects reality rather than
+inventing savings. `add_battery` fires for the PV-only home (HH-1004) where the
+counterfactual is clean. Heat-pump payback is long on this synthetic data
+(€256/yr vs €14.5k capex) — the rule picks the **best-payback** unit and surfaces
+the payback honestly. Both are good iteration targets (richer dispatch model;
+realistic capex/savings).
+
+**Next iterations (engine):**
+- ⬜ Add genuinely-undersized / idle-battery test households so upsize/grid-support fire.
+- ⬜ Confidence/uncertainty on advice benefit; multi-year payback with degradation.
+- ⬜ Per-rule explanations surfaced through the AI phraser (currently phrases the Fact).
+- ⬜ Action outcome tracking → did applying the advice realize the modeled benefit.
+
+---
+
 ## 1. Product summary
 
 Dark Energy turns per-device energy data (PV, battery, heat pump, EV, household

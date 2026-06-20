@@ -104,6 +104,25 @@ class SetBatteryReserve:
 
 
 @register
+class BookMaintenance:
+    type = "book_maintenance"
+    label = "Book a maintenance visit"
+
+    def validate(self, conn, household_id, params):
+        _household(conn, household_id)  # always available
+
+    def execute(self, conn, household_id, params, adapter: DeviceAdapter) -> ActionEffect:
+        device = params.get("device", "heat pump")
+        adapter.apply(household_id, {"action": self.type, "device": device})
+        return ActionEffect(
+            status="executed",
+            message=(f"A maintenance visit for your {device} has been requested. "
+                     f"A technician will contact you to schedule an inspection."),
+            details={"device": device},
+        )
+
+
+@register
 class SuggestTariffSwitch:
     type = "suggest_tariff_switch"
     label = "Compare tariffs"

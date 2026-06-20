@@ -1,91 +1,124 @@
-"""Dashboard service layer: assemble the per-household view from analytics.
+"""Dashboard service layer: assemble the per-household star-diagram view.
 
-Everything here is tenant-scoped — it always takes a ``household_id`` and only
-ever reads that tenant's data through ``frames.load_window`` and the scoped
-helpers. Detectors run, facts are phrased, and the result is a single dict the
-templates and SSE handler render.
+Tenant-scoped throughout. Runs the rule engine, phrases each rule's Fact, and
+shapes the result into:
+  * hub      — the status-quo snapshot (centre of the star)
+  * nodes    — the household's devices + a contract node (the star's points)
+  * advice   — ranked RuleResults, phrased, each tagged with its node so the UI
+               can filter to a device when its node is clicked.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
-from datetime import datetime, timedelta
 
-from ..analytics import anomalies, facts, forecast, frames, metrics
+from .. import rules
 from ..ai.phraser import get_phraser
-from ..db import get_contract, get_household, telemetry_time_range, upsert_detected_insight
+from ..ai.template_phraser import ACTION_LABELS
+from ..analytics import facts as facts_mod
+from ..analytics import status as status_mod
+from ..db import get_contract, get_devices, get_household, upsert_detected_insight
+
+# Display metadata per device category for the star nodes.
+NODE_META = {
+    "household": {"icon": "🏠", "label": "Household"},
+    "pv": {"icon": "☀️", "label": "Solar PV"},
+    "battery": {"icon": "🔋", "label": "Battery"},
+    "heat_pump": {"icon": "♨️", "label": "Heat pump"},
+    "ev": {"icon": "🚗", "label": "EV"},
+    "ev_charger": {"icon": "🔌", "label": "Charger"},
+    "contract": {"icon": "📄", "label": "Contract"},
+}
 
 
-def _latest_ts(conn: sqlite3.Connection, household_id: str) -> datetime | None:
-    rng = telemetry_time_range(conn, household_id)
-    if rng is None:
-        return None
-    return datetime.fromisoformat(rng[1])
+def _node_metric(category: str, dev: sqlite3.Row | None, sq) -> str:
+    """A one-line headline metric for a device node."""
+    if category == "household":
+        return f"{sq.consumption_kwh:.0f} kWh/yr"
+    if category == "pv":
+        return f"{(dev['rated_kw'] or 0):.1f} kWp · {sq.pv_production_kwh:.0f} kWh/yr"
+    if category == "battery":
+        return f"{(dev['capacity_kwh'] or 0):.0f} kWh"
+    if category == "heat_pump":
+        return f"SCOP {(dev['efficiency'] or 0):.1f}"
+    if category == "ev":
+        return f"{(dev['capacity_kwh'] or 0):.0f} kWh pack"
+    if category == "ev_charger":
+        return f"{(dev['rated_kw'] or 0):.0f} kW"
+    return ""
 
 
-def household_summary(conn: sqlite3.Connection, household_id: str) -> dict | None:
-    """Full dashboard payload for one tenant."""
+def household_view(conn: sqlite3.Connection, household_id: str) -> dict | None:
     h = get_household(conn, household_id)
     if h is None:
         return None
+    sq = status_mod.status_quo(conn, household_id)
     contract = get_contract(conn, household_id)
-    as_of = _latest_ts(conn, household_id)
+    devices = get_devices(conn, household_id)
 
-    assets = {
-        "battery": bool(h["battery_kwh"] and h["battery_kwh"] > 0),
-        "heat_pump": bool(h["heat_pump"]),
-        "ev": bool(h["ev_charger"]),
-        "pv": bool(h["pv_kwp"] and h["pv_kwp"] > 0),
-    }
+    # --- nodes (star points) ---
+    nodes = []
+    for d in devices:
+        meta = NODE_META.get(d["category"], {"icon": "⚙️", "label": d["category"]})
+        nodes.append({
+            "kind": "device", "device_id": d["id"], "category": d["category"],
+            "icon": meta["icon"], "label": meta["label"],
+            "metric": _node_metric(d["category"], d, sq) if sq else "",
+        })
+    if contract is not None:
+        nodes.append({
+            "kind": "contract", "device_id": None, "category": "contract",
+            "icon": NODE_META["contract"]["icon"], "label": NODE_META["contract"]["label"],
+            "metric": f"{contract['tariff_id']} · €{contract['base_fee_eur_per_month']:.0f}/mo",
+        })
 
-    status = month = month_cost = bill_fc = None
-    breakdown = {}
-    if as_of is not None:
-        # Current calendar month window for the home's latest data.
-        month_start = as_of.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        mdf = frames.load_window(conn, household_id, month_start, as_of + timedelta(minutes=15))
-        status = metrics.latest_status(mdf)
-        month = metrics.energy_totals(mdf)
-        feed_in = (contract["feed_in_eur_per_kwh"] if contract else 0.081)
-        base_fee = (contract["base_fee_eur_per_month"] if contract else 0.0)
-        month_cost = metrics.energy_cost(mdf, feed_in, base_fee)
-        breakdown = metrics.device_breakdown(mdf)
-        bill_fc = forecast.forecast_bill(conn, household_id, as_of, feed_in, base_fee)
-
-    insights = _insights(conn, household_id)
+    advice = _ranked_advice(conn, household_id)
 
     return {
         "household": dict(h),
-        "assets": assets,
-        "as_of": as_of.isoformat() if as_of else None,
-        "status": status,
-        "month": month.as_dict() if month else None,
-        "month_cost": month_cost,
-        "breakdown": breakdown,
-        "bill_forecast": bill_fc,
-        "insights": insights,
+        "hub": sq.as_dict() if sq else None,
+        "nodes": nodes,
+        "advice": advice,
     }
 
 
-def _insights(conn: sqlite3.Connection, household_id: str) -> list[dict]:
-    """Run detectors, persist them, phrase the facts, and merge with seeded events."""
-    detected = anomalies.detect_all(conn, household_id)
-    bundle = facts.build_bundle(conn, household_id, detected)
+def _ranked_advice(conn: sqlite3.Connection, household_id: str) -> list[dict]:
+    """Run the engine, phrase each result, persist it, return ranked advice dicts."""
+    results = rules.run_rules(conn, household_id)
+    if not results:
+        return []
+
+    bundle = facts_mod.build_bundle(conn, household_id, [r.fact for r in results])
     phrased = {p.fact_key: p for p in get_phraser().phrase(bundle)}
 
-    out: list[dict] = []
-    for fact in detected:
-        pi = phrased.get(fact.key)
-        title = pi.title if pi else fact.title
-        body = pi.body if pi else fact.detail
-        upsert_detected_insight(conn, facts.fact_to_event_row(fact, phrased_text=body))
+    out = []
+    for r in results:
+        f = r.fact
+        pi = phrased.get(f.key)
+        title = pi.title if pi else f.title
+        body = pi.body if pi else f.detail
+        action_label = (pi.action_label if pi and pi.action_label
+                        else ACTION_LABELS.get(f.suggested_action_key or ""))
+        # Persist as a detected insight (carries category/device/benefit/advice).
+        row = facts_mod.fact_to_event_row(f, phrased_text=body)
+        row.update({
+            "category": f.category, "device_id": f.device_id,
+            "benefit_eur": r.benefit_eur or None,
+            "advice_json": r.advice.model_dump_json() if r.advice else None,
+        })
+        upsert_detected_insight(conn, row)
+
         out.append({
-            "fact_key": fact.key,
-            "type": fact.type,
-            "severity": fact.severity,
+            "fact_key": f.key,
+            "category": f.category,
+            "device_id": f.device_id,
+            "severity": f.severity,
             "title": title,
             "body": body,
-            "action_type": fact.suggested_action_key,
-            "action_label": pi.action_label if pi else None,
+            "benefit_eur": round(r.benefit_eur) if r.benefit_eur else None,
+            "advice": r.advice.model_dump() if r.advice else None,
+            "action_type": f.suggested_action_key,
+            "action_label": action_label,
         })
     return out

@@ -27,7 +27,7 @@ from ..db import connect, household_exists, household_ids, init_db
 from ..events.bus import Event, bus
 from ..ingest.mapping import reading_to_record, merge_into_record
 from ..models import DeviceReading, TelemetryRecord
-from .service import household_summary
+from .service import household_view, _ranked_advice
 
 BASE = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
@@ -68,12 +68,33 @@ def dashboard(request: Request, household_id: str):
     conn = db()
     try:
         _require_household(conn, household_id)
-        summary = household_summary(conn, household_id)
+        view = household_view(conn, household_id)
     finally:
         conn.close()
     return templates.TemplateResponse(
-        request, "dashboard.html", {"s": summary, "hid": household_id}
+        request, "dashboard.html", {"v": view, "hid": household_id}
     )
+
+
+@app.get("/api/advice/{household_id}")
+def advice(household_id: str, device_id: int | None = None, category: str | None = None,
+           limit: int = 5):
+    """Ranked advice for a household, optionally filtered to one device node or
+    the contract node. Default returns the top `limit` by benefit."""
+    conn = db()
+    try:
+        _require_household(conn, household_id)
+        items = _ranked_advice(conn, household_id)
+    finally:
+        conn.close()
+    if category is not None:
+        items = [a for a in items if a["category"] == category]
+    if device_id is not None:
+        items = [a for a in items if a["device_id"] == device_id]
+    elif category is None:
+        # Unfiltered default view → top N across everything.
+        items = items[:limit]
+    return {"household_id": household_id, "advice": items}
 
 
 # --- ingest ----------------------------------------------------------------

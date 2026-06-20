@@ -1,0 +1,55 @@
+{
+  "note": "Synthetic catalog of qualified appliances for device-choice advice. efficiency: heat pumps use seasonal COP (SCOP, higher=better); batteries/PV use round-trip or system efficiency (0-1); ev_charger uses charging efficiency (0-1). capex_eur is installed cost for payback framing.",
+  "appliances": [
+    {
+      "id": "hp-standard-9kw", "category": "heat_pump", "make_model": "ThermaBase 9",
+      "rated_kw": 9.0, "efficiency": 3.2, "capex_eur": 11000,
+      "specs_json": {"refrigerant": "R32", "noise_db": 54}
+    },
+    {
+      "id": "hp-eco-9kw", "category": "heat_pump", "make_model": "EcoHeat Pro 9",
+      "rated_kw": 9.0, "efficiency": 4.3, "capex_eur": 14500,
+      "specs_json": {"refrigerant": "R290", "noise_db": 48}
+    },
+    {
+      "id": "hp-eco-11kw", "category": "heat_pump", "make_model": "EcoHeat Pro 11",
+      "rated_kw": 11.0, "efficiency": 4.5, "capex_eur": 16500,
+      "specs_json": {"refrigerant": "R290", "noise_db": 49}
+    },
+    {
+      "id": "batt-7kwh", "category": "battery", "make_model": "PowerCell 7",
+      "capacity_kwh": 7.0, "power_kw": 3.5, "efficiency": 0.90, "capex_eur": 5200,
+      "specs_json": {"chemistry": "LFP", "cycles": 6000}
+    },
+    {
+      "id": "batt-10kwh", "category": "battery", "make_model": "PowerCell 10",
+      "capacity_kwh": 10.0, "power_kw": 5.0, "efficiency": 0.92, "capex_eur": 6800,
+      "specs_json": {"chemistry": "LFP", "cycles": 6000}
+    },
+    {
+      "id": "batt-15kwh", "category": "battery", "make_model": "PowerCell 15",
+      "capacity_kwh": 15.0, "power_kw": 7.5, "efficiency": 0.93, "capex_eur": 9400,
+      "specs_json": {"chemistry": "LFP", "cycles": 8000}
+    },
+    {
+      "id": "batt-20kwh", "category": "battery", "make_model": "PowerCell 20 Max",
+      "capacity_kwh": 20.0, "power_kw": 10.0, "efficiency": 0.94, "capex_eur": 12500,
+      "specs_json": {"chemistry": "LFP", "cycles": 8000, "v2h_capable": true}
+    },
+    {
+      "id": "evc-11kw", "category": "ev_charger", "make_model": "WallFlux 11",
+      "rated_kw": 11.0, "efficiency": 0.94, "capex_eur": 1200,
+      "specs_json": {"phases": 3, "smart": true}
+    },
+    {
+      "id": "evc-22kw-v2h", "category": "ev_charger", "make_model": "WallFlux 22 V2H",
+      "rated_kw": 22.0, "efficiency": 0.96, "capex_eur": 2400,
+      "specs_json": {"phases": 3, "smart": true, "bidirectional": true, "v2h_capable": true}
+    },
+    {
+      "id": "pv-panel-tier", "category": "pv", "make_model": "SunMax 440",
+      "rated_kw": 0.44, "efficiency": 0.225, "capex_eur": 280,
+      "specs_json": {"per_panel": true, "warranty_years": 25}
+    }
+  ]
+}

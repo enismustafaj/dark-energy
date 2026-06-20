@@ -98,17 +98,52 @@ CREATE TABLE IF NOT EXISTS monthly_bills (
     PRIMARY KEY (household_id, month)
 );
 
+-- Canonical record of the devices/assets a household owns. Source of truth for
+-- the rule engine, replacing contracts.assets_json. The 'household' synthetic
+-- device represents aggregate base load.
+CREATE TABLE IF NOT EXISTS devices (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id      TEXT NOT NULL,
+    category          TEXT NOT NULL,  -- pv|battery|heat_pump|ev|ev_charger|household
+    make_model        TEXT,
+    capacity_kwh      REAL,           -- battery / EV battery capacity
+    power_kw          REAL,           -- battery charge/discharge power
+    rated_kw          REAL,           -- heat pump / charger rated power
+    efficiency        REAL,           -- heat-pump SCOP, battery round-trip, etc.
+    installed_year    INTEGER,
+    telemetry_channel TEXT,           -- telemetry column(s) this device drives
+    specs_json        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_devices_hh ON devices(household_id, category);
+
+-- Dataset of qualified appliances backing device-choice advice.
+CREATE TABLE IF NOT EXISTS appliance_catalog (
+    id           TEXT PRIMARY KEY,
+    category     TEXT NOT NULL,
+    make_model   TEXT,
+    capacity_kwh REAL,
+    power_kw     REAL,
+    rated_kw     REAL,
+    efficiency   REAL,
+    capex_eur    REAL,
+    specs_json   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS insight_events (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     household_id    TEXT NOT NULL,
     type            TEXT,    -- anomaly | nudge | insight
+    category        TEXT,    -- fault | contract | device_choice | utilization
+    device_id       INTEGER, -- which device the advice is about (null = whole-home/contract)
     severity        TEXT,    -- info | warning | high
     period          TEXT,
     title           TEXT,
     detail          TEXT,
     suggested_action TEXT,
+    benefit_eur     REAL,    -- annualized customer cost benefit, for ranking
     fact_key        TEXT,    -- links a detected insight to its Fact contract
     fact_json       TEXT,
+    advice_json     TEXT,    -- structured advice + counterfactual breakdown
     phrased_text    TEXT,
     origin          TEXT DEFAULT 'seed',   -- seed | detected
     created_at      TEXT
@@ -236,14 +271,34 @@ def upsert_detected_insight(conn: sqlite3.Connection, row: dict) -> None:
         "AND fact_key=? AND period=?",
         (row["household_id"], row["fact_key"], row["period"]),
     )
+    full = {
+        "category": None, "device_id": None, "benefit_eur": None, "advice_json": None,
+        **row, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
     conn.execute(
-        "INSERT INTO insight_events (household_id,type,severity,period,title,detail,"
-        "suggested_action,fact_key,fact_json,phrased_text,origin,created_at) "
-        "VALUES (:household_id,:type,:severity,:period,:title,:detail,:suggested_action,"
-        ":fact_key,:fact_json,:phrased_text,:origin,:created_at)",
-        {**row, "created_at": datetime.now(timezone.utc).isoformat()},
+        "INSERT INTO insight_events (household_id,type,category,device_id,severity,period,"
+        "title,detail,suggested_action,benefit_eur,fact_key,fact_json,advice_json,"
+        "phrased_text,origin,created_at) "
+        "VALUES (:household_id,:type,:category,:device_id,:severity,:period,:title,:detail,"
+        ":suggested_action,:benefit_eur,:fact_key,:fact_json,:advice_json,:phrased_text,"
+        ":origin,:created_at)",
+        full,
     )
     conn.commit()
+
+
+def get_devices(conn: sqlite3.Connection, household_id: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM devices WHERE household_id=? ORDER BY id", (household_id,)
+    ).fetchall()
+
+
+def get_catalog(conn: sqlite3.Connection, category: str | None = None) -> list[sqlite3.Row]:
+    if category:
+        return conn.execute(
+            "SELECT * FROM appliance_catalog WHERE category=? ORDER BY id", (category,)
+        ).fetchall()
+    return conn.execute("SELECT * FROM appliance_catalog ORDER BY category, id").fetchall()
 
 
 def telemetry_time_range(conn: sqlite3.Connection, household_id: str) -> tuple[str, str] | None:

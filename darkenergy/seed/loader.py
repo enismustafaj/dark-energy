@@ -185,6 +185,74 @@ def _seed_telemetry(conn: sqlite3.Connection, household: dict, dataset_dir: Path
     return inserted
 
 
+def _seed_catalog(conn: sqlite3.Connection, dataset_dir: Path) -> int:
+    path = dataset_dir / "qualified_appliances.json"
+    if not path.exists():
+        return 0
+    data = _load_json(path)
+    items = data["appliances"] if isinstance(data, dict) else data
+    conn.execute("DELETE FROM appliance_catalog")
+    rows = [
+        (a["id"], a["category"], a.get("make_model"), a.get("capacity_kwh"),
+         a.get("power_kw"), a.get("rated_kw"), a.get("efficiency"), a.get("capex_eur"),
+         json.dumps(a.get("specs_json", {})))
+        for a in items
+    ]
+    conn.executemany(
+        "INSERT OR REPLACE INTO appliance_catalog (id,category,make_model,capacity_kwh,"
+        "power_kw,rated_kw,efficiency,capex_eur,specs_json) VALUES (?,?,?,?,?,?,?,?,?)",
+        rows,
+    )
+    return len(rows)
+
+
+def _seed_devices(conn: sqlite3.Connection, dataset_dir: Path) -> int:
+    """Derive the canonical devices table from contract asset specs (richer than
+    the household table — carries SCOP, EV battery, charge power)."""
+    contracts = {c["household_id"]: c for c in _load_json(dataset_dir / "contracts.json")}
+    households = _load_json(dataset_dir / "households.json")
+    conn.execute("DELETE FROM devices")
+    rows: list[tuple] = []
+
+    def add(hh, category, **kw):
+        rows.append((
+            hh, category, kw.get("make_model"), kw.get("capacity_kwh"),
+            kw.get("power_kw"), kw.get("rated_kw"), kw.get("efficiency"),
+            kw.get("installed_year"), kw.get("telemetry_channel"),
+            json.dumps(kw.get("specs", {})),
+        ))
+
+    for h in households:
+        hh = h["household_id"]
+        assets = contracts.get(hh, {}).get("assets", {})
+        # Every home has aggregate household load + a grid connection (implicit).
+        add(hh, "household", telemetry_channel="house_load_kw")
+        if (assets.get("pv_kwp") or h.get("pv_kwp") or 0) > 0:
+            add(hh, "pv", rated_kw=assets.get("pv_kwp", h.get("pv_kwp")),
+                telemetry_channel="pv_production_kw")
+        if (assets.get("battery_kwh") or h.get("battery_kwh") or 0) > 0:
+            add(hh, "battery", capacity_kwh=assets.get("battery_kwh", h.get("battery_kwh")),
+                power_kw=assets.get("battery_power_kw", h.get("battery_power_kw")),
+                efficiency=0.90,
+                telemetry_channel="battery_charge_kw,battery_discharge_kw,battery_soc_pct")
+        if assets.get("heat_pump", h.get("heat_pump")):
+            add(hh, "heat_pump", rated_kw=assets.get("heat_pump_kw"),
+                efficiency=3.2, telemetry_channel="heatpump_kw")  # assumed baseline SCOP
+        if assets.get("ev_charger", h.get("ev_charger")):
+            add(hh, "ev_charger", rated_kw=11.0, efficiency=0.92,
+                telemetry_channel="ev_charging_kw")
+            add(hh, "ev", capacity_kwh=assets.get("ev_battery_kwh"),
+                telemetry_channel="ev_charging_kw")
+
+    conn.executemany(
+        "INSERT INTO devices (household_id,category,make_model,capacity_kwh,power_kw,"
+        "rated_kw,efficiency,installed_year,telemetry_channel,specs_json) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        rows,
+    )
+    return len(rows)
+
+
 def seed(dataset_dir: Path | None = None, db_path: Path | None = None) -> dict[str, int]:
     """Populate the database from a dataset directory. Returns row counts."""
     settings = get_settings()
@@ -204,6 +272,8 @@ def seed(dataset_dir: Path | None = None, db_path: Path | None = None) -> dict[s
             counts["dynamic_prices"] = _seed_dynamic_prices(conn, dataset_dir)
             counts["monthly_bills"] = _seed_monthly_bills(conn, dataset_dir)
             counts["insight_events"] = _seed_insight_events(conn, dataset_dir)
+            counts["devices"] = _seed_devices(conn, dataset_dir)
+            counts["appliance_catalog"] = _seed_catalog(conn, dataset_dir)
 
         total_tel = 0
         for h in households:

@@ -1,78 +1,43 @@
 {% extends "base.html" %}
-{% block title %}{{ s.household.name }} — Dark Energy{% endblock %}
+{% block title %}{{ v.household.name }} — Dark Energy{% endblock %}
 {% block content %}
-<section class="dash" data-hid="{{ hid }}">
+<section class="dash"
+         data-hid="{{ hid }}"
+         data-nodes='{{ v.nodes | tojson }}'
+         data-hub='{{ v.hub | tojson }}'>
   <div class="dash-head">
     <a href="/" class="back">← homes</a>
-    <h1>{{ s.household.name }}</h1>
-    <span class="sub">{{ s.household.city }} · {{ s.household.tariff_id }} tariff
-      {% if s.as_of %}· data through {{ s.as_of[:16].replace("T", " ") }}{% endif %}</span>
+    <h1>{{ v.household.name }}</h1>
+    <span class="sub">{{ v.household.city }} · {{ v.household.tariff_id }} tariff</span>
   </div>
 
-  <div class="cards">
-    <!-- Live status -->
-    <div class="card" id="card-status">
-      <h2>Live status</h2>
-      {% if s.status %}
-      <div class="stat-grid">
-        <div><span class="lbl">Solar</span><span class="val" data-k="pv_production_kw">{{ s.status.pv_production_kw }}</span><span class="unit">kW</span></div>
-        <div><span class="lbl">Using</span><span class="val" data-k="total_consumption_kw">{{ s.status.total_consumption_kw }}</span><span class="unit">kW</span></div>
-        <div><span class="lbl">Grid import</span><span class="val" data-k="grid_import_kw">{{ s.status.grid_import_kw }}</span><span class="unit">kW</span></div>
-        <div><span class="lbl">Grid export</span><span class="val" data-k="grid_export_kw">{{ s.status.grid_export_kw }}</span><span class="unit">kW</span></div>
-        {% if s.assets.battery %}<div><span class="lbl">Battery</span><span class="val" data-k="battery_soc_pct">{{ s.status.battery_soc_pct }}</span><span class="unit">%</span></div>{% endif %}
-        <div><span class="lbl">Price</span><span class="val" data-k="price_eur_per_kwh">{{ s.status.price_eur_per_kwh }}</span><span class="unit">€/kWh</span></div>
-        <div><span class="lbl">Outdoor</span><span class="val" data-k="outdoor_temp_c">{{ s.status.outdoor_temp_c }}</span><span class="unit">°C</span></div>
-      </div>
-      <p class="ts">updated <span id="status-ts">{{ s.status.ts[11:16] }}</span> <span id="live-dot" class="dot"></span></p>
-      {% else %}<p class="empty">No telemetry yet.</p>{% endif %}
-    </div>
-
-    <!-- Cost + forecast -->
-    <div class="card" id="card-cost">
-      <h2>This month</h2>
-      {% if s.month_cost %}
-      <div class="bignum">€{{ "%.2f"|format(s.month_cost.total_eur) }}<span class="bignum-sub">so far</span></div>
-      {% if s.bill_forecast %}
-      <div class="forecast">Projected: <strong>€{{ "%.2f"|format(s.bill_forecast.forecast_total_eur) }}</strong></div>
-      <p class="explain">{{ s.bill_forecast.explanation }}</p>
-      {% endif %}
-      {% else %}<p class="empty">No cost data yet.</p>{% endif %}
-    </div>
-
-    <!-- Metrics -->
-    <div class="card" id="card-metrics">
-      <h2>Energy mix</h2>
-      {% if s.month %}
-      <ul class="metrics">
-        {% if s.month.self_sufficiency_pct is not none %}<li>Self-sufficiency <b>{{ s.month.self_sufficiency_pct }}%</b></li>{% endif %}
-        {% if s.month.pv_self_consumption_pct is not none %}<li>Solar self-use <b>{{ s.month.pv_self_consumption_pct }}%</b></li>{% endif %}
-        <li>Consumed <b>{{ s.month.consumption_kwh }} kWh</b></li>
-        <li>Produced <b>{{ s.month.pv_production_kwh }} kWh</b></li>
-        {% if s.assets.heat_pump and s.breakdown.heatpump_pct is not none %}<li>Heat pump <b>{{ s.breakdown.heatpump_pct }}%</b> of use</li>{% endif %}
-        {% if s.assets.ev and s.breakdown.ev_pct is not none %}<li>EV <b>{{ s.breakdown.ev_pct }}%</b> of use</li>{% endif %}
-      </ul>
-      {% else %}<p class="empty">No data yet.</p>{% endif %}
-    </div>
-  </div>
-
-  <!-- Insights -->
-  <div class="card wide" id="card-insights">
-    <h2>Insights &amp; actions</h2>
-    <div class="insight-feed" id="insight-feed">
-      {% for i in s.insights %}
-      <div class="insight sev-{{ i.severity }}">
-        <div class="insight-body">
-          <h3>{{ i.title }}</h3>
-          <p>{{ i.body }}</p>
+  <div class="dash-grid">
+    <!-- Star diagram -->
+    <div class="diagram-wrap">
+      <div class="hub-summary">
+        {% if v.hub %}
+        <div class="hub-cost">€{{ "%.0f"|format(v.hub.annual_cost_eur) }}<span>/yr</span></div>
+        <div class="hub-metrics">
+          <span>{{ "%.0f"|format(v.hub.consumption_kwh) }} kWh used</span>
+          <span>{{ "%.0f"|format(v.hub.pv_production_kwh) }} kWh solar</span>
+          {% if v.hub.self_sufficiency_pct is not none %}<span>{{ v.hub.self_sufficiency_pct }}% self-sufficient</span>{% endif %}
         </div>
-        {% if i.action_type %}
-        <button class="act-btn" data-action="{{ i.action_type }}">{{ i.action_label or "Take action" }}</button>
         {% endif %}
       </div>
-      {% else %}<p class="empty">No insights yet.</p>{% endfor %}
+      <svg id="star" viewBox="0 0 600 460" preserveAspectRatio="xMidYMid meet"></svg>
+      <p class="diagram-hint">Click a device or the contract to see its advice.</p>
     </div>
-    <div id="action-log" class="action-log"></div>
+
+    <!-- Advice panel -->
+    <aside class="advice-panel">
+      <div class="advice-head">
+        <h2 id="advice-title">Top recommendations</h2>
+        <button id="advice-reset" class="reset-btn" hidden>Show all</button>
+      </div>
+      <div id="advice-list" class="advice-list"><p class="empty">Loading…</p></div>
+      <div id="action-log" class="action-log"></div>
+    </aside>
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="/static/app.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/diagram.js"></script>{% endblock %}
