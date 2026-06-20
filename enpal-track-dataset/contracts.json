@@ -126,5 +126,69 @@
       "ev_battery_kwh": 0
     },
     "contract_terms_text": "This agreement between Enpal B.V. and WG Sonnenallee commences on 2024-03-01 for a minimum term of 24 months ending 2026-03-01. The dynamic hourly electricity tariff applies. A monthly base fee of EUR 12.90 is charged. Surplus PV energy exported to the grid is remunerated at EUR 0.081 per kWh. Notice of termination must be given at least 6 weeks before the end of the term, otherwise the contract renews automatically for 12 months."
+  },
+  {
+    "household_id": "HH-2001",
+    "customer_name": "Familie Wagner",
+    "supply_address": {
+      "city": "Stuttgart",
+      "country": "DE"
+    },
+    "provider": "Enpal",
+    "tariff_id": "dynamic",
+    "tariff_name": "Enpal FlexStrom Dynamic",
+    "contract_start": "2024-06-01",
+    "contract_end": "2026-06-01",
+    "minimum_term_months": 24,
+    "notice_period_weeks": 6,
+    "auto_renew_months": 12,
+    "base_fee_eur_per_month": 12.9,
+    "energy_pricing": {
+      "model": "dynamic_hourly",
+      "spot_adder_eur_per_kwh": 0.119
+    },
+    "feed_in_eur_per_kwh": 0.081,
+    "assets": {
+      "pv_kwp": 8.5,
+      "battery_kwh": 0.0,
+      "battery_power_kw": 0.0,
+      "heat_pump": false,
+      "heat_pump_kw": 0.0,
+      "ev_charger": false,
+      "ev_battery_kwh": 0
+    },
+    "contract_terms_text": "This agreement between Enpal B.V. and Familie Wagner commences on 2024-06-01 for a minimum term of 24 months ending 2026-06-01. The dynamic hourly electricity tariff applies. A monthly base fee of EUR 12.90 is charged. Surplus PV energy exported to the grid is remunerated at EUR 0.081 per kWh. Notice of termination must be given at least 6 weeks before the end of the term, otherwise the contract renews automatically for 12 months."
+  },
+  {
+    "household_id": "HH-2002",
+    "customer_name": "Familie Koch",
+    "supply_address": {
+      "city": "Dresden",
+      "country": "DE"
+    },
+    "provider": "Enpal",
+    "tariff_id": "dynamic",
+    "tariff_name": "Enpal FlexStrom Dynamic",
+    "contract_start": "2024-06-01",
+    "contract_end": "2026-06-01",
+    "minimum_term_months": 24,
+    "notice_period_weeks": 6,
+    "auto_renew_months": 12,
+    "base_fee_eur_per_month": 12.9,
+    "energy_pricing": {
+      "model": "dynamic_hourly",
+      "spot_adder_eur_per_kwh": 0.119
+    },
+    "feed_in_eur_per_kwh": 0.081,
+    "assets": {
+      "pv_kwp": 6.4,
+      "battery_kwh": 5.0,
+      "battery_power_kw": 2.5,
+      "heat_pump": true,
+      "heat_pump_kw": 7.0,
+      "ev_charger": false,
+      "ev_battery_kwh": 0
+    },
+    "contract_terms_text": "This agreement between Enpal B.V. and Familie Koch commences on 2024-06-01 for a minimum term of 24 months ending 2026-06-01. The dynamic hourly electricity tariff applies. A monthly base fee of EUR 12.90 is charged. Surplus PV energy exported to the grid is remunerated at EUR 0.081 per kWh. Notice of termination must be given at least 6 weeks before the end of the term, otherwise the contract renews automatically for 12 months."
   }
 ]

@@ -268,6 +268,7 @@ function Dashboard({ householdId }: { householdId: string }) {
   const [view, setView] = useState<HouseholdView | null>(null);
   const [selection, setSelection] = useState<ActiveSelection>({ type: "all" });
   const [chatOpen, setChatOpen] = useState(false);
+  const recsRef = useRef<HTMLDivElement>(null);
   const [activeThreadKey, setActiveThreadKey] = useState(GENERAL_THREAD_KEY);
   const [chatThreads, setChatThreads] = useState<Record<string, ChatThread>>(() => ({
     [GENERAL_THREAD_KEY]: {
@@ -314,14 +315,22 @@ function Dashboard({ householdId }: { householdId: string }) {
     };
   }, [householdId]);
 
-  // All advice arrives with the household view in one call; filter it in-memory
-  // as the selection changes instead of re-fetching from the backend.
+  // The household's still-open recommendations: everything the engine produced
+  // minus what's already resolved or applied. This single list drives the CTA,
+  // the counts, and the rendered recommendations so they always agree.
+  const openAdvice = useMemo<Advice[]>(() => {
+    const applied = new Set((view?.applied_advice ?? []).map((a) => a.fact_key));
+    return (view?.advice ?? []).filter(
+      (a) => a.status !== "resolved" && !applied.has(a.fact_key),
+    );
+  }, [view]);
+
+  // Open advice filtered to the current selection (device / contract / all).
   const advice = useMemo<Advice[]>(() => {
-    const all = (view?.advice ?? []).filter((item) => item.status !== "resolved");
-    if (selection.type === "contract") return all.filter((a) => a.category === "contract");
-    if (selection.type === "device") return all.filter((a) => a.device_id === selection.deviceId);
-    return all.slice(0, 5); // unfiltered default: top N across everything
-  }, [view, selection]);
+    if (selection.type === "contract") return openAdvice.filter((a) => a.category === "contract");
+    if (selection.type === "device") return openAdvice.filter((a) => a.device_id === selection.deviceId);
+    return openAdvice; // unfiltered: show every open recommendation
+  }, [openAdvice, selection]);
 
   // live action results stream back here and land in the chat as the agent's reply
   useEffect(() => {
@@ -533,16 +542,24 @@ function Dashboard({ householdId }: { householdId: string }) {
     );
 
   const hub = view.hub;
-  const potentialSavings = view.advice.reduce((sum, a) => sum + (a.benefit_eur ?? 0), 0);
 
-  const featured = advice[0] ?? null;
-  const rest = advice.slice(1);
   const chatThreadList = Object.entries(chatThreads).map(([key, thread]) => ({
     key,
     title: thread.title,
     count: thread.messages.length,
     resolved: Boolean(thread.resolved),
   }));
+
+  // Savings still on the table: open recommendations that carry a benefit. The
+  // CTA's count matches the savings-bearing items so its number lines up with the
+  // green "save €X/yr" badges in the list below.
+  const savingAdvice = openAdvice.filter((a) => (a.benefit_eur ?? 0) > 0);
+  const availableSavings = savingAdvice.reduce((sum, a) => sum + (a.benefit_eur ?? 0), 0);
+
+  const focusRecommendations = () => {
+    setSelection({ type: "all" });
+    recsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <>
@@ -576,22 +593,45 @@ function Dashboard({ householdId }: { householdId: string }) {
             sub="projected total"
           />
           <Stat
-            label="Potential savings"
-            value={`€${formatEuro(potentialSavings)}`}
+            label="Savings realized"
+            value={`€${formatEuro(view.realized_savings_eur)}/yr`}
             sub={
               <Group gap={3} component="span">
-                <TrendingDown size={12} /> across {view.advice.length} tips
+                <TrendingDown size={12} /> from {view.applied_advice.length} applied
               </Group>
             }
-            subColor={potentialSavings > 0 ? "energy.7" : "dimmed"}
+            subColor={view.realized_savings_eur > 0 ? "energy.7" : "dimmed"}
           />
         </SimpleGrid>
+
+        {availableSavings > 0 && (
+          <Paper withBorder radius="lg" p="md" className="cta-banner">
+            <Group justify="space-between" align="center" wrap="nowrap" gap="md">
+              <Group gap="sm" wrap="nowrap">
+                <ThemeIcon size={38} radius="md" color="energy" variant="light">
+                  <Zap size={20} />
+                </ThemeIcon>
+                <div>
+                  <Text fw={600} fz={15} lh={1.2}>
+                    Unlock €{formatEuro(availableSavings)}/yr more
+                  </Text>
+                  <Text c="dimmed" fz={13}>
+                    {savingAdvice.length} recommendation{savingAdvice.length === 1 ? "" : "s"} ready to apply
+                  </Text>
+                </div>
+              </Group>
+              <Button color="energy" radius="md" rightSection={<ArrowRight size={16} />} onClick={focusRecommendations} style={{ flexShrink: 0 }}>
+                Review &amp; apply
+              </Button>
+            </Group>
+          </Paper>
+        )}
 
         <Paper withBorder radius="lg" p="md" className="flow-card">
           <EnergyScene view={view} selection={selection} onSelect={setSelection} />
         </Paper>
 
-        <Group justify="space-between" align="center" mt={4}>
+        <Group justify="space-between" align="center" mt={4} ref={recsRef} style={{ scrollMarginTop: 16 }}>
           <Text fz={15} fw={600}>
             {selection.type === "all" ? "Recommendations" : `${titleize(selectionLabel)} · Recommendations`}
           </Text>
@@ -602,11 +642,11 @@ function Dashboard({ householdId }: { householdId: string }) {
           )}
         </Group>
         <AdviceList
-          advice={rest.length ? rest : featured ? [] : advice}
+          advice={advice}
           onAction={handleRecommendation}
           onResolve={handleResolveAdvice}
           resolvingFactKeys={resolvingFactKeys}
-          emptyAll={!featured}
+          emptyAll={selection.type === "all"}
         />
       </Stack>
 
@@ -887,7 +927,9 @@ function AdviceList({
   if (!advice.length)
     return (
       <Text c="dimmed" fs="italic" fz="sm">
-        {emptyAll ? "No advice for this selection." : "That's the only recommendation here."}
+        {emptyAll
+          ? "All caught up — every recommendation has been applied."
+          : "No open recommendations for this selection."}
       </Text>
     );
   return (

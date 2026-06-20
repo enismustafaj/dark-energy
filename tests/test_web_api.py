@@ -15,6 +15,8 @@ def test_households_api_returns_seeded_homes(db_path):
         "HH-1002",
         "HH-1003",
         "HH-1004",
+        "HH-2001",
+        "HH-2002",
     ]
 
 
@@ -37,6 +39,10 @@ def test_household_view_api_returns_client_payload(db_path):
     assert by_action["shift_heatpump_to_cheap_window"] is True
     assert by_action["book_maintenance"] is False
     assert by_action["suggest_tariff_switch"] is False
+    # Realized savings from applied-advice history are part of the payload.
+    assert data["realized_savings_eur"] > 0
+    assert data["applied_advice"]
+    assert sum(a["benefit_eur"] for a in data["applied_advice"]) == data["realized_savings_eur"]
 
 
 def test_completed_action_resolves_recommendation_in_view(db_path):

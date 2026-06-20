@@ -46,11 +46,20 @@ export type Advice = {
   agent_actionable: boolean;
 };
 
+export type AppliedAdvice = {
+  fact_key: string;
+  title: string | null;
+  benefit_eur: number | null;
+  applied_at: string | null;
+};
+
 export type HouseholdView = {
   household: Household;
   hub: Hub | null;
   nodes: EnergyNode[];
   advice: Advice[];
+  applied_advice: AppliedAdvice[];
+  realized_savings_eur: number;
 };
 
 export type ActionEvent = {

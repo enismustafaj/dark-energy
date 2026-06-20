@@ -22,10 +22,12 @@ from ..ai.template_phraser import ACTION_LABELS
 from ..analytics import facts as facts_mod
 from ..analytics import status as status_mod
 from ..db import (
+    get_applied_advice,
     get_cached_advice,
     get_contract,
     get_devices,
     get_household,
+    get_realized_savings,
     set_cached_advice,
     upsert_detected_insight,
 )
@@ -95,11 +97,17 @@ def household_view(conn: sqlite3.Connection, household_id: str) -> dict | None:
     cached = get_cached_advice(conn, household_id)
     advice = json.loads(cached) if cached is not None else recompute_advice(conn, household_id)
 
+    # Advice the household has already acted on, and the annual benefit realized.
+    applied = [dict(r) for r in get_applied_advice(conn, household_id)]
+    realized_savings = round(get_realized_savings(conn, household_id))
+
     return {
         "household": dict(h),
         "hub": sq.as_dict() if sq else None,
         "nodes": nodes,
         "advice": advice,
+        "applied_advice": applied,
+        "realized_savings_eur": realized_savings,
     }
 
 

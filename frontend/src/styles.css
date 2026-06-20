@@ -52,6 +52,13 @@ body {
 /* KPI stat cards */
 .stat { background: #f5f3ee; border: 0.5px solid #eae7df; }
 
+/* call-to-action banner nudging the user to apply more recommendations */
+.cta-banner {
+  background:
+    linear-gradient(90deg, rgba(60, 207, 119, 0.14), rgba(60, 207, 119, 0.05));
+  border-color: var(--mantine-color-energy-3);
+}
+
 /* household picker hover */
 .hover-lift {
   cursor: pointer;

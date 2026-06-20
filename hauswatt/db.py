@@ -188,6 +188,20 @@ CREATE TABLE IF NOT EXISTS advice_cache (
     payload_json    TEXT NOT NULL,
     computed_at     TEXT
 );
+
+-- Advice the household has already acted on. Each row is one applied
+-- recommendation and the annual benefit it locked in, so the dashboard can show
+-- realized (not just potential) savings. `benefit_eur` is the grounded annual
+-- saving captured at the time the advice was applied.
+CREATE TABLE IF NOT EXISTS applied_advice (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id  TEXT NOT NULL,
+    fact_key      TEXT NOT NULL,
+    title         TEXT,
+    benefit_eur   REAL,
+    applied_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_applied_hh ON applied_advice(household_id);
 """
 
 
@@ -377,6 +391,39 @@ def _update_cached_advice_status(
         "UPDATE advice_cache SET payload_json=? WHERE household_id=?",
         (json.dumps(updated), household_id),
     )
+
+
+def add_applied_advice(conn: sqlite3.Connection, household_id: str, fact_key: str,
+                       title: str | None, benefit_eur: float | None,
+                       applied_at: str | None = None) -> None:
+    """Record that a household applied a piece of advice and locked in its benefit."""
+    from datetime import datetime, timezone
+
+    conn.execute(
+        "INSERT INTO applied_advice (household_id,fact_key,title,benefit_eur,applied_at) "
+        "VALUES (?,?,?,?,?)",
+        (household_id, fact_key, title, benefit_eur,
+         applied_at or datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+
+
+def get_applied_advice(conn: sqlite3.Connection, household_id: str) -> list[sqlite3.Row]:
+    """Advice this household has already applied, newest first."""
+    return conn.execute(
+        "SELECT fact_key,title,benefit_eur,applied_at FROM applied_advice "
+        "WHERE household_id=? ORDER BY applied_at DESC",
+        (household_id,),
+    ).fetchall()
+
+
+def get_realized_savings(conn: sqlite3.Connection, household_id: str) -> float:
+    """Total annual benefit the household has locked in from applied advice."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(benefit_eur),0) AS total FROM applied_advice WHERE household_id=?",
+        (household_id,),
+    ).fetchone()
+    return float(row["total"] or 0.0)
 
 
 def get_devices(conn: sqlite3.Connection, household_id: str) -> list[sqlite3.Row]:

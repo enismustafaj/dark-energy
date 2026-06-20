@@ -36,12 +36,35 @@ class StatusQuo:
         return asdict(self)
 
 
+# Where the demo's virtual "now" sits within the latest calendar month, as a
+# fraction of the month. The dataset is a *complete* calendar year, so its last
+# month is fully populated; without a virtual clock, month-to-date would equal
+# the full-month estimate. Anchoring "now" partway through that month makes the
+# dashboard behave like a real live system mid-billing-cycle: only data up to
+# "now" counts as month-to-date, and the estimate genuinely projects the rest.
+MONTH_PROGRESS = 0.40
+
+
+def _virtual_now(df):
+    """The demo's 'current time': a point ~MONTH_PROGRESS into the latest calendar
+    month present in the data. Returns (now_ts, month_start)."""
+    import calendar
+    from datetime import timedelta
+
+    latest = df.index.max()
+    month_start = latest.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    days_in_month = calendar.monthrange(latest.year, latest.month)[1]
+    elapsed = timedelta(days=days_in_month * MONTH_PROGRESS)
+    now = min(month_start + elapsed, latest)  # never run past the data we have
+    return now, month_start
+
+
 def _monthly_costs(df, feed_in: float, base_fee: float) -> tuple[float, float]:
-    """Cost for the latest calendar month present in the data.
+    """Cost for the current (latest) calendar month, as of the virtual 'now'.
 
     Returns (month_to_date, estimated_full_month). Month-to-date is the real cost
-    of every reading from the 1st of the latest month through the latest reading.
-    The estimate linearly projects that month's *energy* cost (import minus
+    of every reading from the 1st of the month through ``now`` (mid-month for the
+    demo). The estimate linearly projects that month's *energy* cost (import minus
     feed-in) to the whole month by elapsed-time, then adds one full base fee.
     """
     import calendar
@@ -49,9 +72,9 @@ def _monthly_costs(df, feed_in: float, base_fee: float) -> tuple[float, float]:
     if df.empty:
         return 0.0, 0.0
 
-    latest = df.index.max()
-    month_start = latest.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month = df[df.index >= month_start]
+    now, month_start = _virtual_now(df)
+    # Only the slice up to the virtual 'now' has happened yet; the rest is future.
+    month = df[(df.index >= month_start) & (df.index <= now)]
     if month.empty:
         return 0.0, 0.0
 
@@ -63,9 +86,9 @@ def _monthly_costs(df, feed_in: float, base_fee: float) -> tuple[float, float]:
                                  base_fee_eur_per_month=0.0)
     energy_so_far = energy.energy_cost_eur - energy.feed_in_credit_eur
 
-    # Elapsed fraction of THIS calendar month, by real days.
-    days_in_month = calendar.monthrange(latest.year, latest.month)[1]
-    elapsed_days = (latest - month_start).total_seconds() / 86400 + frames.STEP_HOURS / 24
+    # Elapsed fraction of THIS calendar month, up to the virtual 'now'.
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    elapsed_days = (now - month_start).total_seconds() / 86400 + frames.STEP_HOURS / 24
     frac = min(elapsed_days / days_in_month, 1.0) if days_in_month else 1.0
 
     # Both legs prorate the base fee by the same fraction, so a complete month

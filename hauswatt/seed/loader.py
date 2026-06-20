@@ -125,26 +125,16 @@ def _seed_monthly_bills(conn: sqlite3.Connection, dataset_dir: Path) -> int:
 
 
 def _seed_insight_events(conn: sqlite3.Connection, dataset_dir: Path) -> int:
-    path = dataset_dir / "insight_events.json"
-    if not path.exists():
-        return 0
-    events = _load_json(path)
-    now = datetime.now(timezone.utc).isoformat()
-    # Clear previously-seeded events to stay idempotent (detected ones are kept).
+    """Intentionally a no-op for the sample insights.
+
+    ``insight_events.json`` was only ever a benchmark/bootstrap for building the
+    proactive layer. The dashboard now surfaces advice exclusively from the live
+    rule engine (``hauswatt.rules``), so we no longer seed those canned insights —
+    and we clear any that an earlier seed wrote, to stay idempotent. Detected
+    insights (origin='detected') are left untouched.
+    """
     conn.execute("DELETE FROM insight_events WHERE origin = 'seed'")
-    rows = [
-        (
-            e["household_id"], e.get("type"), e.get("severity"), e.get("period"),
-            e.get("title"), e.get("detail"), e.get("suggested_action"), "seed", now,
-        )
-        for e in events
-    ]
-    conn.executemany(
-        "INSERT INTO insight_events (household_id,type,severity,period,title,detail,"
-        "suggested_action,origin,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-        rows,
-    )
-    return len(rows)
+    return 0
 
 
 def _seed_telemetry(conn: sqlite3.Connection, household: dict, dataset_dir: Path) -> int:
@@ -253,6 +243,45 @@ def _seed_devices(conn: sqlite3.Connection, dataset_dir: Path) -> int:
     return len(rows)
 
 
+# Which already-computed advice each home should appear to have applied already,
+# so the dashboard shows realized (not just potential) savings out of the box.
+# Keys are fact_key values; only those present with a positive benefit are used.
+# This is demo history — in production these rows are written when a user applies
+# an advice. (See db.add_applied_advice.)
+_APPLIED_HISTORY = {
+    "HH-1001": ["tariff_fit", "heatpump_upgrade"],
+    "HH-1002": ["tariff_fit"],
+    "HH-1003": ["heatpump_upgrade"],
+    "HH-1004": ["tariff_fit"],
+    "HH-2001": ["tariff_fit", "high_baseload"],
+    "HH-2002": ["heatpump_upgrade", "battery_upsize"],
+}
+
+# Stamp the fake applications in the past so they read as "already realized".
+_APPLIED_AT = "2025-02-15T10:00:00+00:00"
+
+
+def _seed_applied_advice(conn, households: list[dict], advice_by_home: dict) -> int:
+    """Fake a history of applied advice (with the benefit it realized) so the
+    dashboard can show savings the customer has already locked in."""
+    from ..db import add_applied_advice
+
+    conn.execute("DELETE FROM applied_advice")  # idempotent re-seed
+    written = 0
+    for h in households:
+        hid = h["household_id"]
+        wanted = _APPLIED_HISTORY.get(hid, [])
+        by_key = {a["fact_key"]: a for a in advice_by_home.get(hid, [])}
+        for key in wanted:
+            a = by_key.get(key)
+            if not a or not a.get("benefit_eur"):
+                continue  # only record advice that actually fired with a saving
+            add_applied_advice(conn, hid, key, a.get("title"),
+                               float(a["benefit_eur"]), applied_at=_APPLIED_AT)
+            written += 1
+    return written
+
+
 def seed(dataset_dir: Path | None = None, db_path: Path | None = None) -> dict[str, int]:
     """Populate the database from a dataset directory. Returns row counts."""
     settings = get_settings()
@@ -285,10 +314,13 @@ def seed(dataset_dir: Path | None = None, db_path: Path | None = None) -> dict[s
         # read (no rule engine on the request path).
         from ..web.service import recompute_advice
         warmed = 0
+        advice_by_home: dict[str, list[dict]] = {}
         for h in households:
-            recompute_advice(conn, h["household_id"])
+            advice_by_home[h["household_id"]] = recompute_advice(conn, h["household_id"])
             warmed += 1
         counts["advice_cache"] = warmed
+
+        counts["applied_advice"] = _seed_applied_advice(conn, households, advice_by_home)
     finally:
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.close()
