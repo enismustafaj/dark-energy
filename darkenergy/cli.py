@@ -21,15 +21,21 @@ def _cmd_seed(args: argparse.Namespace) -> int:
 
 def _cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
+    from pathlib import Path
 
     from .config import get_settings
 
     settings = get_settings()
+    reload = not args.no_reload
+    # Watch the whole package so edits to Python, templates, and static assets
+    # all trigger a reload.
+    pkg_dir = str(Path(__file__).resolve().parent)
     uvicorn.run(
         "darkenergy.web.app:app",
         host=args.host or settings.host,
         port=args.port or settings.port,
-        reload=args.reload,
+        reload=reload,
+        reload_dirs=[pkg_dir] if reload else None,
     )
     return 0
 
@@ -55,10 +61,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("seed", help="Load the dataset into SQLite")
     sp.set_defaults(func=_cmd_seed)
 
-    sv = sub.add_parser("serve", help="Run the FastAPI dashboard + API")
+    sv = sub.add_parser("serve", help="Run the FastAPI dashboard + API (hot-reload on by default)")
     sv.add_argument("--host", default=None)
     sv.add_argument("--port", type=int, default=None)
-    sv.add_argument("--reload", action="store_true")
+    sv.add_argument("--no-reload", action="store_true",
+                    help="disable hot-reload (reload is on by default for local dev)")
     sv.set_defaults(func=_cmd_serve)
 
     sm = sub.add_parser("sim", help="Stream telemetry from a household's devices")

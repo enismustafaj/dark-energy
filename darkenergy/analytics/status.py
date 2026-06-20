@@ -24,7 +24,6 @@ class StatusQuo:
     pv_production_kwh: float
     grid_import_kwh: float
     grid_export_kwh: float
-    self_sufficiency_pct: float | None
     pv_self_consumption_pct: float | None
     annual_cost_eur: float          # annualized total bill
     baseload_kw: float | None
@@ -62,7 +61,6 @@ def status_quo(conn: sqlite3.Connection, household_id: str) -> StatusQuo | None:
         pv_production_kwh=round(tot.pv_production_kwh * annual_factor, 0),
         grid_import_kwh=round(tot.grid_import_kwh * annual_factor, 0),
         grid_export_kwh=round(tot.grid_export_kwh * annual_factor, 0),
-        self_sufficiency_pct=tot.self_sufficiency_pct,
         pv_self_consumption_pct=tot.pv_self_consumption_pct,
         annual_cost_eur=round(cost.total_eur * annual_factor, 0),
         baseload_kw=metrics.baseload_kw(df),

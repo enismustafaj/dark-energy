@@ -77,25 +77,6 @@ def test_heatpump_degradation_flags_maintenance(conn):
     assert r.fact.suggested_action_key == "book_maintenance"
 
 
-# --- Device utilization ----------------------------------------------------
-
-def test_ev_v2h_suggested_when_ev_idle_evening(conn):
-    r = _by_key(conn, "HH-1001").get("ev_v2h")
-    assert r is not None and r.advice.benefit_eur > 0
-
-
-def test_ev_v2h_silent_without_ev(conn):
-    assert "ev_v2h" not in _by_key(conn, "HH-1002")  # no EV
-    assert "ev_v2h" not in _by_key(conn, "HH-1004")
-
-
-def test_battery_grid_support_silent_when_well_dispatched(conn):
-    # Bundled batteries are already well-dispatched → no positive marginal benefit.
-    for hh in ("HH-1001", "HH-1003"):
-        r = _by_key(conn, hh).get("battery_grid_support")
-        assert r is None or r.advice.benefit_eur >= 20
-
-
 # --- Engine invariants -----------------------------------------------------
 
 def test_advice_ranked_by_benefit(conn):
@@ -106,8 +87,7 @@ def test_advice_ranked_by_benefit(conn):
 
 def test_rules_skipped_for_absent_devices(conn):
     keys = set(_by_key(conn, "HH-1004"))
-    for k in ("heatpump_upgrade", "heatpump_overconsumption", "ev_v2h",
-              "battery_upsize", "battery_grid_support"):
+    for k in ("heatpump_upgrade", "heatpump_overconsumption", "battery_upsize"):
         assert k not in keys
 
 

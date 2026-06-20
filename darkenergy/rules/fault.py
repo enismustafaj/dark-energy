@@ -48,7 +48,7 @@ class HeatpumpOverconsumption:
 class HighBaseload:
     key = "high_baseload"
     category = "fault"
-    device_category = "household"
+    device_category = None   # whole-home; not tied to a clickable device node
 
     def applies(self, ctx: RuleContext) -> bool:
         return True
@@ -59,7 +59,6 @@ class HighBaseload:
             return None
         fact = facts[0]
         fact.category = "fault"
-        fact.device_id = _device_id(ctx, "household")
         return RuleResult(fact=fact)
 
 

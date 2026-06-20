@@ -20,22 +20,19 @@ from ..analytics import facts as facts_mod
 from ..analytics import status as status_mod
 from ..db import get_contract, get_devices, get_household, upsert_detected_insight
 
-# Display metadata per device category for the star nodes.
+# Display metadata per device category for the star nodes. The 'household'
+# device is the hub itself, not a point on the star, so it has no entry here.
 NODE_META = {
-    "household": {"icon": "🏠", "label": "Household"},
     "pv": {"icon": "☀️", "label": "Solar PV"},
     "battery": {"icon": "🔋", "label": "Battery"},
     "heat_pump": {"icon": "♨️", "label": "Heat pump"},
     "ev": {"icon": "🚗", "label": "EV"},
-    "ev_charger": {"icon": "🔌", "label": "Charger"},
     "contract": {"icon": "📄", "label": "Contract"},
 }
 
 
 def _node_metric(category: str, dev: sqlite3.Row | None, sq) -> str:
     """A one-line headline metric for a device node."""
-    if category == "household":
-        return f"{sq.consumption_kwh:.0f} kWh/yr"
     if category == "pv":
         return f"{(dev['rated_kw'] or 0):.1f} kWp · {sq.pv_production_kwh:.0f} kWh/yr"
     if category == "battery":
@@ -43,9 +40,7 @@ def _node_metric(category: str, dev: sqlite3.Row | None, sq) -> str:
     if category == "heat_pump":
         return f"SCOP {(dev['efficiency'] or 0):.1f}"
     if category == "ev":
-        return f"{(dev['capacity_kwh'] or 0):.0f} kWh pack"
-    if category == "ev_charger":
-        return f"{(dev['rated_kw'] or 0):.0f} kW"
+        return f"{(dev['capacity_kwh'] or 0):.0f} kWh · {(dev['rated_kw'] or 0):.0f} kW"
     return ""
 
 
@@ -57,9 +52,11 @@ def household_view(conn: sqlite3.Connection, household_id: str) -> dict | None:
     contract = get_contract(conn, household_id)
     devices = get_devices(conn, household_id)
 
-    # --- nodes (star points) ---
+    # --- nodes (star points) — the household device is the hub, not a point ---
     nodes = []
     for d in devices:
+        if d["category"] == "household":
+            continue
         meta = NODE_META.get(d["category"], {"icon": "⚙️", "label": d["category"]})
         nodes.append({
             "kind": "device", "device_id": d["id"], "category": d["category"],

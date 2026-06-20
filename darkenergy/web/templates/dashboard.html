@@ -20,7 +20,6 @@
         <div class="hub-metrics">
           <span>{{ "%.0f"|format(v.hub.consumption_kwh) }} kWh used</span>
           <span>{{ "%.0f"|format(v.hub.pv_production_kwh) }} kWh solar</span>
-          {% if v.hub.self_sufficiency_pct is not none %}<span>{{ v.hub.self_sufficiency_pct }}% self-sufficient</span>{% endif %}
         </div>
         {% endif %}
       </div>

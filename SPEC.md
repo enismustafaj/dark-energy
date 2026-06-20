@@ -33,8 +33,15 @@ household's real telemetry. Advice is ranked by annual customer cost benefit.
 |---|---|---|
 | `contract` | `tariff_fit` | reprice year under each alternative tariff |
 | `device_choice` | `heatpump_upgrade`, `add_battery`, `battery_upsize` | SCOP-scaled load; battery dispatch (neutralizing the recorded battery for upsize) |
-| `utilization` | `battery_grid_support`, `ev_v2h`, `cheapest_window` | price-aware battery/EV dispatch vs recorded |
+| `utilization` | `cheapest_window` | — (price-window nudge) |
 | `fault` | `heatpump_overconsumption` (→ maintenance), `high_baseload`, `bill_spike` | none (ranked by severity) |
+
+**Trim (post-iteration-2):** removed the vehicle-to-home / battery-grid-support
+dispensing rules; merged EV + charger into one `ev` device (pack capacity +
+charger power); dropped the `household` star node (it's the hub, no separate
+advice) and the self-sufficiency metric. The star shows PV, battery, heat pump,
+EV, and contract nodes. All headline numbers are now annual cost (€/yr), so the
+hub and advice baselines read consistently.
 
 The four anomaly detectors from iteration 1 are **re-homed** as `fault` rules
 (`rules/fault.py` wraps the still-tested `analytics/anomalies.py` functions).

@@ -239,10 +239,10 @@ def _seed_devices(conn: sqlite3.Connection, dataset_dir: Path) -> int:
             add(hh, "heat_pump", rated_kw=assets.get("heat_pump_kw"),
                 efficiency=3.2, telemetry_channel="heatpump_kw")  # assumed baseline SCOP
         if assets.get("ev_charger", h.get("ev_charger")):
-            add(hh, "ev_charger", rated_kw=11.0, efficiency=0.92,
-                telemetry_channel="ev_charging_kw")
+            # EV + charger modeled as one device: the pack capacity plus the
+            # charger's rated power and efficiency.
             add(hh, "ev", capacity_kwh=assets.get("ev_battery_kwh"),
-                telemetry_channel="ev_charging_kw")
+                rated_kw=11.0, efficiency=0.92, telemetry_channel="ev_charging_kw")
 
     conn.executemany(
         "INSERT INTO devices (household_id,category,make_model,capacity_kwh,power_kw,"
