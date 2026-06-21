@@ -25,7 +25,7 @@ Energy balance holds every step: `pv + grid_import + battery_discharge = total_c
 
 **`monthly_bills.json`** — 48 records (4 homes × 12 months): consumption, PV, import/export, energy cost, feed-in credit, total bill, self-sufficiency %.
 
-**`insight_events.json`** — pre-detected anomalies & nudges (heat-pump fault week, cheapest-charging-window, high standby/baseload, bill-spike month). _No longer seeded_ — kept only as a benchmark for the proactive layer. All dashboard insights now come from the live rule engine (`hauswatt/rules`).
+**`insight_events.json`** — pre-detected anomalies & nudges (heat-pump fault week, cheapest-charging-window, high standby/baseload, bill-spike month). _No longer seeded_ — kept only as a benchmark for the proactive layer. All dashboard insights now come from the live rule engine (`energyintelligence/rules`).
 
 ## Households
 
@@ -42,7 +42,7 @@ Energy balance holds every step: `pv + grid_import + battery_discharge = total_c
 
 HH-1001..1004 were used to *build* the system, and their advice was originally
 bootstrapped from `insight_events.json`. That sample file is no longer seeded —
-every dashboard insight now comes from the live rule engine (`hauswatt/rules`).
+every dashboard insight now comes from the live rule engine (`energyintelligence/rules`).
 HH-2001 and HH-2002 are engineered to make the ruleset fire on its own:
 
 | Home | Ruleset insights it surfaces |
@@ -52,7 +52,7 @@ HH-2001 and HH-2002 are engineered to make the ruleset fire on its own:
 
 Both are derived from an existing home's telemetry and mutated by
 `scripts/generate_showcase_households.py`, which rebalances every changed step so
-the energy-balance invariant still holds. Re-run that script then `hauswatt seed`
+the energy-balance invariant still holds. Re-run that script then `energyintelligence seed`
 to regenerate.
 
 All values are synthetic and for hackathon use only.

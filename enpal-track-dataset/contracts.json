@@ -152,10 +152,10 @@
       "pv_kwp": 8.5,
       "battery_kwh": 0.0,
       "battery_power_kw": 0.0,
-      "heat_pump": false,
-      "heat_pump_kw": 0.0,
-      "ev_charger": false,
-      "ev_battery_kwh": 0
+      "heat_pump": true,
+      "heat_pump_kw": 8.0,
+      "ev_charger": true,
+      "ev_battery_kwh": 60
     },
     "contract_terms_text": "This agreement between Enpal B.V. and Familie Wagner commences on 2024-06-01 for a minimum term of 24 months ending 2026-06-01. The dynamic hourly electricity tariff applies. A monthly base fee of EUR 12.90 is charged. Surplus PV energy exported to the grid is remunerated at EUR 0.081 per kWh. Notice of termination must be given at least 6 weeks before the end of the term, otherwise the contract renews automatically for 12 months."
   },

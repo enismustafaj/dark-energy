@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hauswatt"
+name = "energyintelligence"
 version = "0.1.0"
 description = "HausWatt — customer intelligence layer over residential energy telemetry"
 requires-python = ">=3.11"
@@ -24,10 +24,10 @@ openai = ["openai>=1.40"]
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
 
 [project.scripts]
-hauswatt = "hauswatt.cli:main"
+energyintelligence = "energyintelligence.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["hauswatt*"]
+include = ["energyintelligence*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

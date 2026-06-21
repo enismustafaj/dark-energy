@@ -2,7 +2,7 @@
 
 The original four homes (HH-1001..1004) were used to build the system and their
 dashboard advice was seeded from ``insight_events.json``. These two new homes
-are engineered so that the rules in ``hauswatt.rules`` fire on their own — no
+are engineered so that the rules in ``energyintelligence.rules`` fire on their own — no
 seeded insights involved:
 
   HH-2001 (derived from HH-1004 — PV, no battery):
@@ -35,6 +35,15 @@ DATASET = Path(__file__).resolve().parent.parent / "enpal-track-dataset"
 # House-load floor (kW) applied to the 01:00–05:00 band of HH-2001 so its
 # overnight median clears 60% of the all-hours average (high_baseload trigger).
 NIGHT_BASELOAD_KW = 0.42
+
+# Evening load boost for HH-2001 (18:00–23:00): added household draw in the hours
+# after the sun is down, so the home imports more in the evening. Paired with its
+# strong daytime solar surplus, this is the classic profile where a battery
+# (charged midday, discharged at night) genuinely pays back within its lifespan —
+# making add_battery fire legitimately under the lifespan gate, not as a fudge.
+EVENING_BOOST_KW = 1.6
+EVENING_START_HOUR = 18
+EVENING_END_HOUR = 23
 
 # Winter overconsumption window for HH-2002 (inclusive date range) and the factor
 # the heat-pump draw is multiplied by inside it. 40% over norm comfortably clears
@@ -80,13 +89,44 @@ def build_hh2001() -> None:
     src = _load("energy_timeseries_HH-1004.json")
     recs = copy.deepcopy(src["records"])
 
-    for r in recs:
+    # Borrow real heat-pump and EV load profiles so Wagner can showcase every
+    # device on the diagram (PV + heat pump + EV; battery stays absent so the
+    # add_battery recommendation still fires). HH-1002 has a heat pump, HH-1001
+    # has an EV; all three series are the same length on the same 15-min grid.
+    hp_recs = _load("energy_timeseries_HH-1002.json")["records"]
+    ev_recs = _load("energy_timeseries_HH-1001.json")["records"]
+
+    # The donor EV charges around midnight, which a same-day-solar battery can't
+    # reach. Re-home each day's EV energy into the evening window so it overlaps
+    # the hours a midday-charged battery would discharge into — both realistic for
+    # a solar home and what keeps add_battery economic (pays back within its life).
+    ev_by_day: dict[str, float] = {}
+    for er in ev_recs:
+        day = er["timestamp"][:10]
+        ev_by_day[day] = ev_by_day.get(day, 0.0) + er.get("ev_charging_kw", 0.0) * 0.25  # kWh/day
+    evening_hours = list(range(EVENING_START_HOUR, EVENING_END_HOUR + 1))
+    ev_kw_in_evening = {  # spread the day's EV kWh flat across the evening window
+        day: kwh / (len(evening_hours)) for day, kwh in ev_by_day.items()
+    }
+
+    for i, r in enumerate(recs):
+        h = _hour(r)
+        day = r["timestamp"][:10]
+        # Heat pump: copy the donor's real, temperature-driven profile as-is.
+        if i < len(hp_recs):
+            r["heatpump_kw"] = round(hp_recs[i].get("heatpump_kw", 0.0), 3)
+        # EV: charge in the evening window instead of at midnight.
+        r["ev_charging_kw"] = round(ev_kw_in_evening.get(day, 0.0), 3) if h in evening_hours else 0.0
         # Raise overnight standby to create a high always-on baseload signature.
-        if 1 <= _hour(r) < 5:
+        if 1 <= h < 5:
             r["house_load_kw"] = round(max(r["house_load_kw"], NIGHT_BASELOAD_KW), 3)
-            _rebalance(r)
-        # Leave the rest as-is: HH-1004 already has PV, no battery, and ~3.8 MWh
-        # of export — exactly what add_battery looks for.
+        # Add a little evening household load too (sun down → grid import) so a
+        # battery charged from the day's surplus has something to discharge into.
+        elif EVENING_START_HOUR <= h <= EVENING_END_HOUR:
+            r["house_load_kw"] = round(r["house_load_kw"] + EVENING_BOOST_KW, 3)
+        # Rebalance every step: heat-pump + EV load now flow into consumption and
+        # the grid position. (HH-1004 base keeps PV + no battery + strong export.)
+        _rebalance(r)
 
     out = {
         "household_id": "HH-2001",
@@ -192,10 +232,12 @@ NEW_HOUSEHOLDS = [
         "city": "Stuttgart",
         "residents": 4,
         "pv_kwp": 8.5,
+        # No battery on purpose — Wagner is the add_battery showcase. It owns every
+        # other device (PV + heat pump + EV) so the diagram shows each glyph.
         "battery_kwh": 0.0,
         "battery_power_kw": 0.0,
-        "heat_pump": False,
-        "ev_charger": False,
+        "heat_pump": True,
+        "ev_charger": True,
         "tariff_id": "dynamic",
         "timeseries_file": "energy_timeseries_HH-2001.json",
     },
@@ -215,7 +257,7 @@ NEW_HOUSEHOLDS = [
 ]
 
 
-def _contract_for(h: dict, hp_kw: float) -> dict:
+def _contract_for(h: dict, hp_kw: float, ev_battery_kwh: float = 0) -> dict:
     return {
         "household_id": h["household_id"],
         "customer_name": h["name"],
@@ -238,7 +280,7 @@ def _contract_for(h: dict, hp_kw: float) -> dict:
             "heat_pump": h["heat_pump"],
             "heat_pump_kw": hp_kw,
             "ev_charger": h["ev_charger"],
-            "ev_battery_kwh": 0,
+            "ev_battery_kwh": ev_battery_kwh,
         },
         "contract_terms_text": (
             f"This agreement between Enpal B.V. and {h['name']} commences on "
@@ -260,7 +302,7 @@ def update_metadata() -> None:
 
     contracts = [c for c in _load("contracts.json")
                  if c["household_id"] not in ("HH-2001", "HH-2002")]
-    contracts.append(_contract_for(NEW_HOUSEHOLDS[0], hp_kw=0.0))
+    contracts.append(_contract_for(NEW_HOUSEHOLDS[0], hp_kw=8.0, ev_battery_kwh=60))
     contracts.append(_contract_for(NEW_HOUSEHOLDS[1], hp_kw=7.0))
     (DATASET / "contracts.json").write_text(json.dumps(contracts, indent=2))
     print(f"households: {len(households)} | contracts: {len(contracts)}")
@@ -271,7 +313,7 @@ def main() -> None:
     build_hh2002()
     update_monthly_bills()
     update_metadata()
-    print("Done. Re-run `hauswatt seed` to load the showcase households.")
+    print("Done. Re-run `energyintelligence seed` to load the showcase households.")
 
 
 if __name__ == "__main__":

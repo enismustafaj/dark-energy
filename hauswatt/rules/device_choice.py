@@ -23,6 +23,18 @@ from .base import RuleContext, register
 
 STEP_HOURS = 0.25
 
+# Usable life of a home LFP battery, in years. Manufacturer warranties run
+# 10–12 years (~5,000 cycles); LFP sits at the upper end. We won't pitch a
+# battery whose payback outlasts the hardware — that's a guaranteed net loss, not
+# a saving. Used to gate add_battery / battery_upsize.
+BATTERY_LIFESPAN_YEARS = 12
+
+# Usable life of an air-source heat pump, in years (typically 10–15, up to ~20–25
+# with diligent maintenance). Same principle: replacing a working heat pump only
+# to chase a higher SCOP rarely pays back before the new unit itself wears out, so
+# we don't recommend it as a buy-now saving when payback exceeds this.
+HEATPUMP_LIFESPAN_YEARS = 15
+
 
 def _payback(capex: float | None, benefit: float) -> float | None:
     if not capex or benefit <= 0:
@@ -115,6 +127,11 @@ class HeatpumpUpgrade:
         if best is None:
             return None
         best, benefit, payback, cf = best
+        # Don't pitch replacing a working heat pump if the efficiency gain won't
+        # pay back within the new unit's own lifespan — that's a net loss, and the
+        # upgrade only makes sense at natural end-of-life replacement.
+        if payback is None or payback > HEATPUMP_LIFESPAN_YEARS:
+            return None
         payback_disp = round(payback) if payback else None
 
         fact = Fact(
@@ -155,19 +172,26 @@ class AddBattery:
                 and ctx.status.grid_export_kwh > 200)
 
     def evaluate(self, ctx: RuleContext) -> RuleResult | None:
-        # Pick the battery whose net annual benefit is highest.
-        best = None
+        # Among batteries that pay back within their usable life, pick the highest
+        # benefit. Gating per-candidate (not after picking the single best-benefit
+        # unit) means a pricier battery with a marginally higher benefit but an
+        # out-of-life payback doesn't disqualify a cheaper, genuinely viable one.
+        best = None  # (cand, benefit, payback, cf)
         for cand in ctx.catalog_for("battery"):
             transform = _battery_dispatch_transform(
                 cand["capacity_kwh"], cand["power_kw"], cand["efficiency"] or 0.9)
             cf = ctx.replay(transform=transform)
             benefit = round(ctx.annualize(ctx.baseline_cost.total_eur - cf.total_eur), 0)
+            if benefit <= 0:
+                continue
+            payback = _payback(cand["capex_eur"], benefit)
+            if payback is None or payback > BATTERY_LIFESPAN_YEARS:
+                continue
             if best is None or benefit > best[1]:
-                best = (cand, benefit, cf)
-        cand, benefit, cf = best
-        if benefit <= 0:
+                best = (cand, benefit, payback, cf)
+        if best is None:
             return None
-        payback = _payback(cand["capex_eur"], benefit)
+        cand, benefit, payback, cf = best
         payback_disp = round(payback) if payback else None
         fact = Fact(
             key="add_battery", household_id=ctx.household_id, type="insight",
@@ -220,19 +244,26 @@ class BatteryUpsize:
                                             dev["efficiency"] or 0.9,
                                             neutralize_existing=True)
         cur_cf = ctx.replay(transform=cur_t)
-        best = None
+        # Best benefit among upsizes that pay back within the battery's life (gate
+        # per-candidate so a viable cheaper upgrade isn't discarded for a pricier
+        # higher-benefit one that fails the gate).
+        best = None  # (cand, benefit, payback, cf)
         for cand in bigger:
             t = _battery_dispatch_transform(cand["capacity_kwh"], cand["power_kw"],
                                             cand["efficiency"] or 0.9,
                                             neutralize_existing=True)
             cf = ctx.replay(transform=t)
             benefit = round(ctx.annualize(cur_cf.total_eur - cf.total_eur), 0)
+            if benefit <= 0:
+                continue
+            payback = _payback(cand["capex_eur"], benefit)
+            if payback is None or payback > BATTERY_LIFESPAN_YEARS:
+                continue
             if best is None or benefit > best[1]:
-                best = (cand, benefit, cf)
-        cand, benefit, cf = best
-        if benefit <= 0:
+                best = (cand, benefit, payback, cf)
+        if best is None:
             return None
-        payback = _payback(cand["capex_eur"], benefit)
+        cand, benefit, payback, cf = best
         fact = Fact(
             key="battery_upsize", household_id=ctx.household_id, type="insight",
             category="device_choice", device_id=dev["id"], severity="info",

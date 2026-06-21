@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from hauswatt.analytics import frames, metrics
-from hauswatt.db import get_contract
+from energyintelligence.analytics import frames, metrics
+from energyintelligence.db import get_contract
 
 
 @pytest.mark.parametrize("hh", ["HH-1001", "HH-1002", "HH-1003", "HH-1004"])

@@ -19,6 +19,7 @@ from ..actions import builtin  # noqa: F401
 from ..actions.base import ActionError, get_action
 from ..ai.phraser import get_phraser
 from ..ai.template_phraser import ACTION_LABELS
+from ..analytics import anomalies as anomalies_mod
 from ..analytics import facts as facts_mod
 from ..analytics import status as status_mod
 from ..db import (
@@ -27,6 +28,7 @@ from ..db import (
     get_contract,
     get_devices,
     get_household,
+    get_monthly_bills,
     get_realized_savings,
     set_cached_advice,
     upsert_detected_insight,
@@ -196,10 +198,86 @@ def _ranked_advice(conn: sqlite3.Connection, household_id: str) -> list[dict]:
             "action_label": action_label,
             "agent_actionable": agent_actionable,
             "status": status,
+            # The grounded figures behind the advice + an optional small dataset the
+            # UI renders as a chart (see _advice_viz). Lets each card show "how this
+            # works" with real supporting data, no extra API round-trip.
+            "numbers": dict(f.numbers),
+            "viz": _advice_viz(conn, household_id, r),
         }
         if status != "resolved":
             out.append(item)
     return out
+
+
+def _advice_viz(conn: sqlite3.Connection, household_id: str, result) -> dict | None:
+    """Build a compact, grounded visualization payload for an advice item, or None
+    when the advice type has no chart. Every figure here already exists in the
+    Fact's numbers, the Advice projection, or the household's stored data — nothing
+    is invented.
+    """
+    f = result.fact
+    nums = f.numbers
+    adv = result.advice
+
+    if f.key == "bill_spike":
+        bills = get_monthly_bills(conn, household_id)
+        if len(bills) < 2:
+            return None
+        return {
+            "kind": "monthly_bills",
+            "series": [{"month": b["month"], "total_eur": round(b["total_bill_eur"] or 0, 2)}
+                       for b in bills],
+            "high_month": nums.get("high_month"),
+            "low_month": nums.get("low_month"),
+        }
+
+    if f.key == "cheapest_window":
+        contract = get_contract(conn, household_id)
+        tariff_id = contract["tariff_id"] if contract else "dynamic"
+        by_hour = anomalies_mod.hourly_retail_prices(conn, tariff_id)
+        if by_hour is None:
+            return None
+        return {
+            "kind": "hourly_price",
+            "by_hour": [{"hour": int(h), "price": round(float(p), 3)}
+                        for h, p in by_hour.items()],
+            "cheap_hour": nums.get("cheap_hour"),
+        }
+
+    if f.key == "high_baseload":
+        baseload = float(nums.get("baseload_kw", 0) or 0)
+        ratio_pct = float(nums.get("ratio_pct", 0) or 0)
+        # ratio_pct = baseload / avg_load * 100  ->  avg_load = baseload / ratio
+        avg_load = round(baseload / (ratio_pct / 100), 3) if ratio_pct else 0
+        return {
+            "kind": "baseload",
+            "baseload_kw": round(baseload, 3),
+            "avg_load_kw": avg_load,
+        }
+
+    if f.key in ("add_battery", "battery_upsize") and adv is not None:
+        # Frame the grid-dependence reduction as before/after annual grid spend.
+        if adv.baseline_cost_eur is None or adv.counterfactual_cost_eur is None:
+            return None
+        return {
+            "kind": "grid_independence",
+            "now_eur": round(adv.baseline_cost_eur, 0),
+            "after_eur": round(adv.counterfactual_cost_eur, 0),
+            "capacity_kwh": nums.get("capacity_kwh") or nums.get("new_kwh"),
+        }
+
+    if f.key == "tariff_fit" and adv is not None:
+        cur = nums.get("current_eur", adv.baseline_cost_eur)
+        alt = nums.get("alternative_eur", adv.counterfactual_cost_eur)
+        if cur is None or alt is None:
+            return None
+        return {
+            "kind": "tariff_compare",
+            "current_eur": round(float(cur), 0),
+            "alternative_eur": round(float(alt), 0),
+        }
+
+    return None
 
 
 def _agent_actionable(conn: sqlite3.Connection, household_id: str, action_key: str | None) -> bool:

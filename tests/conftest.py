@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from hauswatt.config import get_settings
-from hauswatt.db import connect
+from energyintelligence.config import get_settings
+from energyintelligence.db import connect
 
 
 @pytest.fixture(scope="session")
@@ -20,7 +20,7 @@ def db_path(tmp_path_factory):
     import os
     os.environ["DARKENERGY_DB_PATH"] = str(path)
     get_settings.cache_clear()  # type: ignore[attr-defined]
-    from hauswatt.seed.loader import seed
+    from energyintelligence.seed.loader import seed
     seed(db_path=path)
     return path
 

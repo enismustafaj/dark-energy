@@ -28,6 +28,7 @@ class StatusQuo:
     annual_cost_eur: float          # annualized total bill
     month_to_date_cost_eur: float   # cost so far in the latest month of data
     month_estimated_cost_eur: float # projected full-month cost (end of month)
+    prev_month_cost_eur: float | None  # full bill of the previous calendar month
     baseload_kw: float | None
     device_kwh: dict                # category -> annualized kWh
     latest: dict | None
@@ -100,6 +101,25 @@ def _monthly_costs(df, feed_in: float, base_fee: float) -> tuple[float, float]:
     return month_to_date, estimated
 
 
+def _prev_month_cost(df, feed_in: float, base_fee: float) -> float | None:
+    """Full bill for the calendar month *before* the current one — the baseline
+    the dashboard compares this month's projection against (month-over-month)."""
+    if df.empty:
+        return None
+    _, month_start = _virtual_now(df)
+    prev_end = month_start  # exclusive: start of the current month
+    # First day of the previous calendar month.
+    py, pm = (month_start.year - 1, 12) if month_start.month == 1 else (
+        month_start.year, month_start.month - 1)
+    prev_start = month_start.replace(year=py, month=pm)
+    prev = df[(df.index >= prev_start) & (df.index < prev_end)]
+    if prev.empty:
+        return None
+    cost = costing.replay_cost(prev, feed_in_eur_per_kwh=feed_in,
+                               base_fee_eur_per_month=base_fee)
+    return round(cost.total_eur, 2)
+
+
 def status_quo(conn: sqlite3.Connection, household_id: str) -> StatusQuo | None:
     """Full-history snapshot, annualized."""
     df = frames.load_window(conn, household_id)
@@ -117,6 +137,7 @@ def status_quo(conn: sqlite3.Connection, household_id: str) -> StatusQuo | None:
                                base_fee_eur_per_month=base_fee)
 
     mtd_cost, est_cost = _monthly_costs(df, feed_in, base_fee)
+    prev_cost = _prev_month_cost(df, feed_in, base_fee)
 
     def by_device(col: str) -> float:
         return round(metrics._sum_kwh(df, col) * annual_factor, 0)
@@ -133,6 +154,7 @@ def status_quo(conn: sqlite3.Connection, household_id: str) -> StatusQuo | None:
         annual_cost_eur=round(cost.total_eur * annual_factor, 0),
         month_to_date_cost_eur=round(mtd_cost, 2),
         month_estimated_cost_eur=round(est_cost, 2),
+        prev_month_cost_eur=prev_cost,
         baseload_kw=metrics.baseload_kw(df),
         device_kwh={
             "heat_pump": by_device("heatpump_kw"),

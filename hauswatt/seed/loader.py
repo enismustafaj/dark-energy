@@ -129,7 +129,7 @@ def _seed_insight_events(conn: sqlite3.Connection, dataset_dir: Path) -> int:
 
     ``insight_events.json`` was only ever a benchmark/bootstrap for building the
     proactive layer. The dashboard now surfaces advice exclusively from the live
-    rule engine (``hauswatt.rules``), so we no longer seed those canned insights —
+    rule engine (``energyintelligence.rules``), so we no longer seed those canned insights —
     and we clear any that an earlier seed wrote, to stay idempotent. Detected
     insights (origin='detected') are left untouched.
     """
@@ -249,12 +249,12 @@ def _seed_devices(conn: sqlite3.Connection, dataset_dir: Path) -> int:
 # This is demo history — in production these rows are written when a user applies
 # an advice. (See db.add_applied_advice.)
 _APPLIED_HISTORY = {
-    "HH-1001": ["tariff_fit", "heatpump_upgrade"],
+    "HH-1001": ["tariff_fit", "cheapest_window"],
     "HH-1002": ["tariff_fit"],
-    "HH-1003": ["heatpump_upgrade"],
+    "HH-1003": ["cheapest_window"],
     "HH-1004": ["tariff_fit"],
     "HH-2001": ["tariff_fit", "high_baseload"],
-    "HH-2002": ["heatpump_upgrade", "battery_upsize"],
+    "HH-2002": ["tariff_fit"],
 }
 
 # Stamp the fake applications in the past so they read as "already realized".
@@ -309,6 +309,12 @@ def seed(dataset_dir: Path | None = None, db_path: Path | None = None) -> dict[s
             with transaction(conn):
                 total_tel += _seed_telemetry(conn, h, dataset_dir)
         counts["telemetry"] = total_tel
+
+        # A full re-seed is a clean baseline: drop previously-detected insights so
+        # stale per-session state (e.g. a recommendation resolved in an earlier
+        # run) doesn't carry over and silently filter advice back out. They're
+        # regenerated fresh — as 'open' — by recompute_advice just below.
+        conn.execute("DELETE FROM insight_events WHERE origin = 'detected'")
 
         # Warm the advice cache so the first GET /view per household is a pure
         # read (no rule engine on the request path).

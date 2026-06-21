@@ -1,3 +1,5 @@
+import { AreaChart, BarChart } from "@mantine/charts";
+import "@mantine/charts/styles.css";
 import {
   ActionIcon,
   Alert,
@@ -7,6 +9,7 @@ import {
   Button,
   Card,
   Center,
+  Collapse,
   Container,
   createTheme,
   Group,
@@ -19,17 +22,20 @@ import {
   TextInput,
   ThemeIcon,
   Title,
+  UnstyledButton,
 } from "@mantine/core";
 import "@mantine/core/styles.css";
 import {
   ArrowLeft,
   ArrowRight,
   Bot,
+  ChevronDown,
   Home,
   MessageSquare,
   RotateCcw,
   Send,
   TrendingDown,
+  TrendingUp,
   TriangleAlert,
   X,
   Zap,
@@ -38,7 +44,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { API_BASE_URL, getHouseholdView, listHouseholds, runAction, sendChatMessage, updateAdviceStatus } from "./api";
 import "./styles.css";
-import type { ActionEvent, Advice, ChatTurn, EnergyNode, Household, HouseholdView } from "./types";
+import type { ActionEvent, Advice, AdviceViz, ChatTurn, EnergyNode, Household, HouseholdView } from "./types";
 
 const theme = createTheme({
   primaryColor: "energy",
@@ -104,6 +110,14 @@ function titleize(value: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "YYYY-MM" -> short month name (e.g. "2025-05" -> "May").
+function monthName(yyyymm: string): string {
+  const m = Number(yyyymm.slice(5, 7));
+  return MONTH_NAMES[m - 1] ?? yyyymm;
+}
+
 function msgId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -152,7 +166,7 @@ function Topbar() {
       <Container size="lg" h="100%">
         <Group h="100%" justify="space-between">
           <Group gap={10} className="brand" onClick={() => navigate("/")} role="button">
-            <img src="/hauswatt-wordmark.svg" alt="HausWatt" className="logo-wordmark" />
+            <img src="/energyintelligence-wordmark.svg" alt="HausWatt" className="logo-wordmark" />
             <Text c="dimmed" fz={12} visibleFrom="sm">
               Less cost. More loyalty. Zero disruption.
             </Text>
@@ -536,12 +550,22 @@ function Dashboard({ householdId }: { householdId: string }) {
 
   const hub = view.hub;
 
-  const chatThreadList = Object.entries(chatThreads).map(([key, thread]) => ({
-    key,
-    title: thread.title,
-    count: thread.messages.length,
-    resolved: Boolean(thread.resolved),
-  }));
+  // Month-over-month: compare the projected full-month cost to last month's bill.
+  const prevMonthCost = hub?.prev_month_cost_eur ?? null;
+  const momDeltaPct =
+    prevMonthCost && hub ? ((hub.month_estimated_cost_eur - prevMonthCost) / prevMonthCost) * 100 : null;
+
+  // Only show per-recommendation threads in the switcher. The general
+  // "Household chat" thread is the default the panel opens to, so listing it as a
+  // separate (empty) chip is redundant and confusing — keep it out of the list.
+  const chatThreadList = Object.entries(chatThreads)
+    .filter(([key]) => key !== GENERAL_THREAD_KEY)
+    .map(([key, thread]) => ({
+      key,
+      title: thread.title,
+      count: thread.messages.length,
+      resolved: Boolean(thread.resolved),
+    }));
 
   // Savings still on the table: open recommendations that carry a benefit. The
   // CTA's count matches the savings-bearing items so its number lines up with the
@@ -551,7 +575,15 @@ function Dashboard({ householdId }: { householdId: string }) {
 
   const focusRecommendations = () => {
     setSelection({ type: "all" });
-    recsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Switching to "all" re-renders the list with every recommendation, which
+    // changes the page height. Defer the scroll to the next frame(s) so it
+    // measures the grown layout — otherwise it scrolls against the old (shorter)
+    // DOM and stops short of the recommendations.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        recsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      ),
+    );
   };
 
   return (
@@ -583,7 +615,17 @@ function Dashboard({ householdId }: { householdId: string }) {
           <Stat
             label="Est. end of month"
             value={`€${formatEuro(hub?.month_estimated_cost_eur)}`}
-            sub="projected total"
+            sub={
+              momDeltaPct == null ? (
+                "projected total"
+              ) : (
+                <Group gap={3} component="span">
+                  {momDeltaPct > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                  {`${momDeltaPct > 0 ? "+" : ""}${Math.round(momDeltaPct)}% vs last month`}
+                </Group>
+              )
+            }
+            subColor={momDeltaPct == null ? "dimmed" : momDeltaPct > 0 ? "red.7" : "energy.7"}
           />
           <Stat
             label="Savings realized"
@@ -643,7 +685,7 @@ function Dashboard({ householdId }: { householdId: string }) {
           </Text>
           {selection.type !== "all" && (
             <Button variant="default" size="compact-sm" leftSection={<RotateCcw size={14} />} onClick={() => setSelection({ type: "all" })}>
-              All devices
+              All recommendations
             </Button>
           )}
         </Group>
@@ -718,10 +760,9 @@ function EnergyScene({
 
   return (
     <>
-      <svg className="scene" viewBox="0 0 680 470" width="100%" role="img" aria-label="Isometric home scene with solar, heat pump and EV">
+      <svg className="scene" viewBox="0 66 680 350" width="100%" role="img" aria-label="Isometric home scene with solar, heat pump and EV">
         <defs>
           <path id="de-p-sun" d="M 578 128 Q 480 160 380 196" fill="none" />
-          <path id="de-p-roof" d="M 356 232 Q 350 260 340 288" fill="none" />
           <path id="de-p-hp" d="M 282 308 Q 258 304 234 296" fill="none" />
           <path id="de-p-ev" d="M 317 310 Q 358 296 397 326" fill="none" />
           <path id="de-p-batt" d="M 278 360 Q 305 348 330 336" fill="none" />
@@ -733,18 +774,18 @@ function EnergyScene({
         {pv && (
           <>
             <g className="de-tw">
-              <circle cx="578" cy="115" r="18" fill="#EF9F27" />
-              <circle cx="578" cy="115" r="11" fill="#FAC775" />
+              <circle cx="578" cy="115" r="23" fill="#EF9F27" />
+              <circle cx="578" cy="115" r="14" fill="#FAC775" />
             </g>
-            <g stroke="#EF9F27" strokeWidth="1.5" strokeLinecap="round" className="de-ray" fill="none">
-              <line x1="578" y1="83" x2="578" y2="75" />
-              <line x1="610" y1="115" x2="618" y2="115" />
-              <line x1="601" y1="92" x2="606" y2="87" />
-              <line x1="601" y1="138" x2="606" y2="143" />
-              <line x1="555" y1="92" x2="550" y2="87" />
-              <line x1="555" y1="138" x2="550" y2="143" />
-              <line x1="546" y1="115" x2="538" y2="115" />
-              <line x1="578" y1="147" x2="578" y2="155" />
+            <g stroke="#EF9F27" strokeWidth="1.8" strokeLinecap="round" className="de-ray" fill="none">
+              <line x1="578" y1="85" x2="578" y2="75" />
+              <line x1="618" y1="115" x2="628" y2="115" />
+              <line x1="606" y1="87" x2="613" y2="80" />
+              <line x1="606" y1="143" x2="613" y2="150" />
+              <line x1="550" y1="87" x2="543" y2="80" />
+              <line x1="550" y1="143" x2="543" y2="150" />
+              <line x1="538" y1="115" x2="528" y2="115" />
+              <line x1="578" y1="145" x2="578" y2="155" />
             </g>
           </>
         )}
@@ -804,9 +845,9 @@ function EnergyScene({
             <polygon points="380,342 401,354 401,346 380,333" fill="#1D9E75" stroke="#085041" strokeWidth=".5" />
             <polygon points="433,335 401,354 401,346 433,327" fill="#0F6E56" stroke="#085041" strokeWidth=".5" />
             <polygon points="412,314 433,327 401,345 380,333" fill="#9FE1CB" stroke="#085041" strokeWidth=".5" />
-            <polygon points="384,338 398,346 398,343 384,335" fill="#444441" stroke="#085041" strokeWidth=".3" />
-            <polygon points="428,331 408,343 408,340 428,328" fill="#444441" stroke="#085041" strokeWidth=".3" />
-            <ellipse cx="380" cy="355" rx="1.6" ry="2.6" fill="#FCE9A6" stroke="#C9A23B" strokeWidth=".4" transform="rotate(-31 380 355)" />
+            <polygon points="383,337 399,346 399,351 383,342" fill="#444441" stroke="#085041" strokeWidth=".3" />
+            <polygon points="405,345 429,331 429,336 405,350" fill="#444441" stroke="#085041" strokeWidth=".3" />
+            <ellipse cx="375" cy="351" rx="1.6" ry="2.6" fill="#FCE9A6" stroke="#C9A23B" strokeWidth=".4" transform="rotate(-31 375 351)" />
             <ellipse cx="390" cy="361" rx="1.6" ry="2.6" fill="#FCE9A6" stroke="#C9A23B" strokeWidth=".4" transform="rotate(-31 390 361)" />
             <ellipse cx="402" cy="370" rx="2.5" ry="4.5" fill="#2C2C2A" />
             <ellipse cx="402" cy="370" rx="1.1" ry="2" fill="#888780" />
@@ -843,14 +884,6 @@ function EnergyScene({
               </animateMotion>
             </circle>
           ))}
-        {pv &&
-          [0, 0.55, 1.1].map((b, i) => (
-            <circle key={`r${i}`} r={i === 1 ? 1.5 : 1.7} fill="#BA7517" opacity={i === 1 ? 0.8 : 1}>
-              <animateMotion dur="1.6s" repeatCount="indefinite" begin={`${b}s`}>
-                <mpath href="#de-p-roof" />
-              </animateMotion>
-            </circle>
-          ))}
         {hp &&
           [0, 0.6, 1.2].map((b, i) => (
             <circle key={`h${i}`} r={i === 1 ? 1.6 : 1.8} fill="#7F77DD" opacity={i === 1 ? 0.8 : 1}>
@@ -879,22 +912,22 @@ function EnergyScene({
         <g style={{ fontFamily: MONO, fontSize: 9 }}>
           {pv && (
             <>
-              <line x1="332" y1="218" x2="170" y2="180" stroke="#cfcabf" strokeWidth=".5" />
-              <text x="166" y="176" textAnchor="end" style={{ fill: "#185FA5", fontWeight: 600 }}>
+              <line x1="332" y1="218" x2="166" y2="180" stroke="#cfcabf" strokeWidth=".5" />
+              <text x="8" y="176" style={{ fill: "#185FA5", fontWeight: 600 }}>
                 {pv.label}
               </text>
-              <text x="166" y="190" textAnchor="end" style={{ fill: "#8a857c" }}>
+              <text x="8" y="190" style={{ fill: "#8a857c" }}>
                 {pv.metric}
               </text>
             </>
           )}
           {hp && (
             <>
-              <line x1="226" y1="282" x2="170" y2="252" stroke="#cfcabf" strokeWidth=".5" />
-              <text x="150" y="250" textAnchor="end" style={{ fill: "#534AB7", fontWeight: 600 }}>
+              <line x1="226" y1="282" x2="120" y2="252" stroke="#cfcabf" strokeWidth=".5" />
+              <text x="8" y="250" style={{ fill: "#534AB7", fontWeight: 600 }}>
                 {hp.label}
               </text>
-              <text x="150" y="264" textAnchor="end" style={{ fill: "#8a857c" }}>
+              <text x="8" y="264" style={{ fill: "#8a857c" }}>
                 {hp.metric}
               </text>
             </>
@@ -912,18 +945,15 @@ function EnergyScene({
           )}
           {battery && (
             <>
-              <line x1="254" y1="376" x2="150" y2="392" stroke="#cfcabf" strokeWidth=".5" />
-              <text x="146" y="390" textAnchor="end" style={{ fill: "#4E7A1E", fontWeight: 600 }}>
+              <line x1="254" y1="376" x2="120" y2="392" stroke="#cfcabf" strokeWidth=".5" />
+              <text x="8" y="390" style={{ fill: "#4E7A1E", fontWeight: 600 }}>
                 {battery.label}
               </text>
-              <text x="146" y="404" textAnchor="end" style={{ fill: "#8a857c" }}>
+              <text x="8" y="404" style={{ fill: "#8a857c" }}>
                 {battery.metric}
               </text>
             </>
           )}
-          <text x="340" y="392" textAnchor="middle" style={{ fill: "#3a3a37", fontWeight: 600 }}>
-            Home
-          </text>
         </g>
       </svg>
 
@@ -974,61 +1004,257 @@ function AdviceList({
   return (
     <Stack gap="sm">
       {advice.map((item) => (
-        <Card key={item.fact_key} withBorder radius="md" padding="md" style={{ borderLeft: `3px solid ${accentVar(item)}` }}>
-          <Group gap="xs" mb={6} wrap="wrap">
-            <Badge size="xs" variant="light" color={CATEGORY_COLOR[item.category] ?? "gray"} radius="sm">
-              {titleize(item.category)}
-            </Badge>
-            {item.benefit_eur ? (
-              <Badge size="xs" variant="filled" color="energy" radius="sm">
-                save €{item.benefit_eur}/yr
-              </Badge>
-            ) : null}
-            {item.advice?.payback_years ? (
-              <Text c="dimmed" fz="xs">
-                ~{Math.round(item.advice.payback_years)}yr payback
-              </Text>
-            ) : null}
-          </Group>
-          <Title order={3} fz="md">
-            {item.title}
-          </Title>
-          <Text c="dimmed" fz="sm" mt={4}>
-            {item.body}
-          </Text>
-          {item.advice?.baseline_cost_eur != null && (
-            <Group gap="xs" mt="sm" fz="sm" wrap="wrap">
-              <Text c="dimmed" fz="sm">
-                €{formatEuro(item.advice.baseline_cost_eur)}/yr now
-              </Text>
-              <ThemeIcon variant="transparent" color="energy" size="sm">
-                <ArrowRight size={15} />
-              </ThemeIcon>
-              <Text fw={600} fz="sm">
-                €{formatEuro(item.advice.counterfactual_cost_eur)}/yr
-              </Text>
-            </Group>
-          )}
-          <Group justify="flex-end" mt="sm">
-            {item.agent_actionable ? (
-              <Button size="sm" color="energy" leftSection={<MessageSquare size={15} />} onClick={() => onAction(item)}>
-                {item.action_label || "Describe action needed"}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => onResolve(item)}
-                loading={resolvingFactKeys.includes(item.fact_key)}
-              >
-                Resolve
-              </Button>
-            )}
-          </Group>
-        </Card>
+        <AdviceCard
+          key={item.fact_key}
+          item={item}
+          onAction={onAction}
+          onResolve={onResolve}
+          resolving={resolvingFactKeys.includes(item.fact_key)}
+        />
       ))}
     </Stack>
   );
+}
+
+// Short, plain-language explanations of how each recommendation works — shown in
+// the card's expandable "How this works" panel. Grounded, no jargon, 2–4 sentences.
+const EXPLANATIONS: Record<string, string> = {
+  add_battery:
+    "Your panels make more power at midday than you use, so the surplus is sold to the grid cheaply and bought back expensively after dark. A home battery stores that midday surplus to use in the evening, so you lean on the grid — and its price swings — far less.",
+  battery_upsize:
+    "Your current battery fills up and still lets surplus solar spill to the grid. A larger one captures more of that surplus to use later, cutting how much you buy back at night.",
+  tariff_fit:
+    "Your bill depends on the tariff your usage is priced under. We re-price a full year of your actual usage against the other available tariffs, and this one comes out cheaper. Some plans also reward flexibility with credits or cashback for shifting usage off-peak.",
+  high_baseload:
+    "Some devices draw power around the clock, even when idle. Your overnight draw is unusually high compared with your daily average, which points to always-on loads worth tracking down and switching off.",
+  bill_spike:
+    "Energy bills swing with the seasons — heating demand and lower winter sun push some months well above others. This month stood out against your own yearly pattern, which is normal but worth seeing.",
+  cheapest_window:
+    "On a dynamic tariff the price changes every hour. Moving flexible loads — EV charging, dishwasher, laundry — into the cheapest window each day means paying less for exactly the same energy.",
+  heatpump_overconsumption:
+    "We compare your heat pump's electricity use against what's normal for the outdoor temperature. It ran well above that for a sustained stretch, which can signal a fault, low refrigerant, or a thermostat misconfiguration worth a service check.",
+  heatpump_upgrade:
+    "A heat pump's efficiency (SCOP) sets how much heat you get per unit of electricity. A higher-SCOP model delivers the same warmth for less power — most worthwhile to choose when your current unit is due for replacement.",
+};
+
+function AdviceCard({
+  item,
+  onAction,
+  onResolve,
+  resolving,
+}: {
+  item: Advice;
+  onAction: (advice: Advice) => void;
+  onResolve: (advice: Advice) => void;
+  resolving: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const explanation = EXPLANATIONS[item.fact_key];
+  const hasDetail = Boolean(explanation || item.viz);
+
+  return (
+    <Card withBorder radius="md" padding="md" style={{ borderLeft: `3px solid ${accentVar(item)}` }}>
+      <Group gap="xs" mb={6} wrap="wrap">
+        <Badge size="xs" variant="light" color={CATEGORY_COLOR[item.category] ?? "gray"} radius="sm">
+          {titleize(item.category)}
+        </Badge>
+        {item.benefit_eur ? (
+          <Badge size="xs" variant="filled" color="energy" radius="sm">
+            save €{item.benefit_eur}/yr
+          </Badge>
+        ) : null}
+        {item.advice?.payback_years ? (
+          <Text c="dimmed" fz="xs">
+            ~{Math.round(item.advice.payback_years)}yr payback
+          </Text>
+        ) : null}
+      </Group>
+      <Title order={3} fz="md">
+        {item.title}
+      </Title>
+      <Text c="dimmed" fz="sm" mt={4}>
+        {item.body}
+      </Text>
+      {item.advice?.baseline_cost_eur != null && (
+        <Group gap="xs" mt="sm" fz="sm" wrap="wrap">
+          <Text c="dimmed" fz="sm">
+            €{formatEuro(item.advice.baseline_cost_eur)}/yr now
+          </Text>
+          <ThemeIcon variant="transparent" color="energy" size="sm">
+            <ArrowRight size={15} />
+          </ThemeIcon>
+          <Text fw={600} fz="sm">
+            €{formatEuro(item.advice.counterfactual_cost_eur)}/yr
+          </Text>
+        </Group>
+      )}
+
+      {hasDetail && (
+        <>
+          <UnstyledButton onClick={() => setOpen((v) => !v)} mt="sm" style={{ display: "block" }}>
+            <Group gap={4} c="dimmed">
+              <ChevronDown
+                size={14}
+                style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform .15s" }}
+              />
+              <Text fz="xs" fw={600}>
+                How this works
+              </Text>
+            </Group>
+          </UnstyledButton>
+          <Collapse in={open}>
+            <Stack gap="sm" mt="xs">
+              {explanation && (
+                <Text c="dimmed" fz="xs" lh={1.55}>
+                  {explanation}
+                </Text>
+              )}
+              {item.viz && <AdviceViz viz={item.viz} />}
+            </Stack>
+          </Collapse>
+        </>
+      )}
+
+      <Group justify="flex-end" mt="sm">
+        {item.agent_actionable ? (
+          <Button size="sm" color="energy" leftSection={<MessageSquare size={15} />} onClick={() => onAction(item)}>
+            {item.action_label || "Describe action needed"}
+          </Button>
+        ) : (
+          <Button size="sm" variant="default" onClick={() => onResolve(item)} loading={resolving}>
+            Resolve
+          </Button>
+        )}
+      </Group>
+    </Card>
+  );
+}
+
+// A compact chart for an advice's supporting data. Each branch reads the grounded
+// `viz` payload the backend embedded — month-to-month, hour-of-day, or before/after.
+function AdviceViz({ viz }: { viz: AdviceViz }) {
+  if (viz.kind === "monthly_bills") {
+    const data = viz.series.map((p) => ({
+      month: monthName(p.month), // "Jan", "Feb", …
+      Bill: p.total_eur,
+    }));
+    return (
+      <div>
+        <Text fz={11} c="dimmed" mb={4}>
+          Your bill, month by month (€)
+        </Text>
+        <BarChart
+          h={150}
+          data={data}
+          dataKey="month"
+          series={[{ name: "Bill", color: "yellow.6" }]}
+          withYAxis={false}
+          withTooltip
+          tooltipProps={{ labelFormatter: () => "" }}
+          barProps={{ radius: 3 }}
+        />
+      </div>
+    );
+  }
+
+  if (viz.kind === "hourly_price") {
+    const data = viz.by_hour.map((p) => ({
+      hour: `${String(p.hour).padStart(2, "0")}`,
+      Price: p.price,
+    }));
+    return (
+      <div>
+        <Text fz={11} c="dimmed" mb={4}>
+          Price by hour of day (€/kWh) · cheapest around {String(viz.cheap_hour ?? 0).padStart(2, "0")}:00
+        </Text>
+        <AreaChart
+          h={150}
+          data={data}
+          dataKey="hour"
+          series={[{ name: "Price", color: "blue.6" }]}
+          withYAxis={false}
+          withTooltip
+          tooltipProps={{ labelFormatter: () => "" }}
+          curveType="monotone"
+          withDots={false}
+        />
+      </div>
+    );
+  }
+
+  if (viz.kind === "baseload") {
+    const data = [
+      { label: "Overnight", kW: viz.baseload_kw },
+      { label: "Daily avg", kW: viz.avg_load_kw },
+    ];
+    return (
+      <div>
+        <Text fz={11} c="dimmed" mb={4}>
+          Always-on draw vs. your average load (kW)
+        </Text>
+        <BarChart
+          h={140}
+          data={data}
+          dataKey="label"
+          series={[{ name: "kW", color: "yellow.6" }]}
+          withYAxis={false}
+          withTooltip
+          tooltipProps={{ labelFormatter: () => "" }}
+          barProps={{ radius: 3 }}
+        />
+      </div>
+    );
+  }
+
+  if (viz.kind === "grid_independence") {
+    const data = [
+      { label: "Today", "€/yr": viz.now_eur },
+      { label: "With battery", "€/yr": viz.after_eur },
+    ];
+    return (
+      <div>
+        <Text fz={11} c="dimmed" mb={4}>
+          Yearly grid spend — and how much less you'd lean on the grid
+        </Text>
+        <BarChart
+          h={140}
+          data={data}
+          dataKey="label"
+          series={[{ name: "€/yr", color: "energy.6" }]}
+          withYAxis={false}
+          withTooltip
+          tooltipProps={{ labelFormatter: () => "" }}
+          barProps={{ radius: 3 }}
+        />
+      </div>
+    );
+  }
+
+  if (viz.kind === "tariff_compare") {
+    const data = [
+      { label: "Current", "€/yr": viz.current_eur },
+      { label: "Suggested", "€/yr": viz.alternative_eur },
+    ];
+    return (
+      <div>
+        <Text fz={11} c="dimmed" mb={4}>
+          Yearly cost — current tariff vs. the better-fit one
+        </Text>
+        <BarChart
+          h={140}
+          data={data}
+          dataKey="label"
+          series={[{ name: "€/yr", color: "blue.6" }]}
+          withYAxis={false}
+          withTooltip
+          tooltipProps={{ labelFormatter: () => "" }}
+          barProps={{ radius: 3 }}
+        />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function ChatPanel({

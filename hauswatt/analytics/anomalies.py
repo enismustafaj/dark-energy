@@ -164,29 +164,37 @@ def detect_bill_spike(conn: sqlite3.Connection, household_id: str) -> list[Fact]
     return [fact]
 
 
-def detect_cheapest_window(
-    conn: sqlite3.Connection, household_id: str, tariff_id: str
-) -> list[Fact]:
-    """Find the cheapest hour-of-day from recent dynamic prices and nudge to shift
-    flexible loads there. Handles negative/zero prices."""
-    # Use the most recent ~7 days of spot prices available.
+def hourly_retail_prices(conn: sqlite3.Connection, tariff_id: str) -> pd.Series | None:
+    """Average retail price (spot + tariff adder) by hour-of-day over the most
+    recent ~7 days of dynamic prices. Indexed 0–23. None if no price data.
+
+    Shared by the cheapest-window detector and the dashboard's price visualization
+    so both read the same numbers.
+    """
     rows = conn.execute(
         "SELECT ts, spot_price_eur_per_kwh FROM dynamic_prices ORDER BY ts DESC LIMIT 168"
     ).fetchall()
     if not rows:
-        return []
+        return None
     s = pd.Series(
         {pd.to_datetime(r["ts"]): r["spot_price_eur_per_kwh"] for r in rows}
     ).sort_index()
-
     tariff = conn.execute(
         "SELECT spot_adder_eur_per_kwh, energy_rate_eur_per_kwh, type FROM tariffs WHERE tariff_id=?",
         (tariff_id,),
     ).fetchone()
     adder = (tariff["spot_adder_eur_per_kwh"] or 0.0) if tariff else 0.0
-    retail = s + adder
+    return (s + adder).groupby((s + adder).index.hour).mean()
 
-    by_hour = retail.groupby(retail.index.hour).mean()
+
+def detect_cheapest_window(
+    conn: sqlite3.Connection, household_id: str, tariff_id: str
+) -> list[Fact]:
+    """Find the cheapest hour-of-day from recent dynamic prices and nudge to shift
+    flexible loads there. Handles negative/zero prices."""
+    by_hour = hourly_retail_prices(conn, tariff_id)
+    if by_hour is None:
+        return []
     cheap_hour = int(by_hour.idxmin())
     cheap_price = round(float(by_hour.min()), 3)
     fact = Fact(

@@ -66,7 +66,7 @@ def run_sim(
     ).fetchall()
     conn.close()
     if not rows:
-        print("No telemetry to replay — run `hauswatt seed` first.")
+        print("No telemetry to replay — run `energyintelligence seed` first.")
         return 1
 
     now = datetime.utcnow().replace(second=0, microsecond=0)

@@ -432,6 +432,16 @@ def get_devices(conn: sqlite3.Connection, household_id: str) -> list[sqlite3.Row
     ).fetchall()
 
 
+def get_monthly_bills(conn: sqlite3.Connection, household_id: str) -> list[sqlite3.Row]:
+    """A household's monthly bills, oldest first — the month-to-month series used
+    by the dashboard's utilization visualizations."""
+    return conn.execute(
+        "SELECT month, total_bill_eur, consumption_kwh, grid_import_kwh "
+        "FROM monthly_bills WHERE household_id=? ORDER BY month",
+        (household_id,),
+    ).fetchall()
+
+
 def get_catalog(conn: sqlite3.Connection, category: str | None = None) -> list[sqlite3.Row]:
     if category:
         return conn.execute(

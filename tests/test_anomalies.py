@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hauswatt.analytics import anomalies
+from energyintelligence.analytics import anomalies
 
 
 def _overlaps(a: str, b: str) -> bool:

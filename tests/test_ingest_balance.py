@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hauswatt.ingest.mapping import reading_to_record
-from hauswatt.models import DeviceReading, TelemetryRecord
+from energyintelligence.ingest.mapping import reading_to_record
+from energyintelligence.models import DeviceReading, TelemetryRecord
 
 
 def test_device_reading_merge_holds_balance():

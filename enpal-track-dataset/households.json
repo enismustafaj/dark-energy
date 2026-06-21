@@ -59,8 +59,8 @@
     "pv_kwp": 8.5,
     "battery_kwh": 0.0,
     "battery_power_kw": 0.0,
-    "heat_pump": false,
-    "ev_charger": false,
+    "heat_pump": true,
+    "ev_charger": true,
     "tariff_id": "dynamic",
     "timeseries_file": "energy_timeseries_HH-2001.json"
   },

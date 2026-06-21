@@ -28,7 +28,7 @@ household's real telemetry. Advice is ranked by annual customer cost benefit.
   radially; top-5 advice by benefit by default; click a node to filter advice to
   that device (or the contract). `GET /api/advice/{hh}?device_id=&category=`.
 
-**Rule categories & rules** (`hauswatt/rules/`):
+**Rule categories & rules** (`energyintelligence/rules/`):
 | Category | Rules | Counterfactual |
 |---|---|---|
 | `contract` | `tariff_fit` | reprice year under each alternative tariff |
@@ -273,7 +273,7 @@ suggested_action_key}` — the phraser may only reuse values in `numbers`.
 
 ## 6. Surfaces (API + CLI)
 
-**CLI:** `hauswatt seed` · `hauswatt serve` · `hauswatt sim --household … [--devices --speed --clock --seed --base-url --limit]`
+**CLI:** `energyintelligence seed` · `energyintelligence serve` · `energyintelligence sim --household … [--devices --speed --clock --seed --base-url --limit]`
 
 **HTTP:**
 | Method | Path | Purpose |

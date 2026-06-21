@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from hauswatt.web.app import app
+from energyintelligence.web.app import app
 
 
 def test_households_api_returns_seeded_homes(db_path):
@@ -54,6 +54,13 @@ def test_household_view_api_returns_client_payload(db_path):
     assert data["realized_savings_eur"] > 0
     assert data["applied_advice"]
     assert sum(a["benefit_eur"] for a in data["applied_advice"]) == data["realized_savings_eur"]
+    # Each advice carries its grounded numbers + an optional viz payload the UI
+    # renders as a chart under "How this works".
+    assert all("numbers" in item and isinstance(item["numbers"], dict) for item in data["advice"])
+    bill_spike = next((i for i in data["advice"] if i["fact_key"] == "bill_spike"), None)
+    if bill_spike is not None:
+        assert bill_spike["viz"] and bill_spike["viz"]["kind"] == "monthly_bills"
+        assert bill_spike["viz"]["series"]
 
 
 def test_completed_action_resolves_recommendation_in_view(db_path):

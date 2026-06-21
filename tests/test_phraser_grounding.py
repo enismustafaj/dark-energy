@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from hauswatt.ai.prompts import allowed_numbers, grounding_violations
-from hauswatt.ai.template_phraser import TemplatePhraser
-from hauswatt.models import Fact, FactBundle
+from energyintelligence.ai.prompts import allowed_numbers, grounding_violations
+from energyintelligence.ai.template_phraser import TemplatePhraser
+from energyintelligence.models import Fact, FactBundle
 
 
 def test_grounding_check_flags_hallucinated_number():

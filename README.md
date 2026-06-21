@@ -16,11 +16,11 @@ control actions, an API backend, and a separate React dashboard using SSE.
 
 | Capability | Where |
 |---|---|
-| Real-time streaming for devices | `hauswatt/ingest/` + `hauswatt/simulators/` |
-| ETL over energy usage & production | `hauswatt/analytics/metrics.py` |
-| Bill forecasting & anomaly detection | `hauswatt/analytics/{forecast,anomalies}.py` |
-| AI layer: insights → user-friendly feedback + actions | `hauswatt/ai/` |
-| Per-household dashboard (insights, forecast, actions) | `frontend/` + `hauswatt/web/` API |
+| Real-time streaming for devices | `energyintelligence/ingest/` + `energyintelligence/simulators/` |
+| ETL over energy usage & production | `energyintelligence/analytics/metrics.py` |
+| Bill forecasting & anomaly detection | `energyintelligence/analytics/{forecast,anomalies}.py` |
+| AI layer: insights → user-friendly feedback + actions | `energyintelligence/ai/` |
+| Per-household dashboard (insights, forecast, actions) | `frontend/` + `energyintelligence/web/` API |
 
 ### Design principles
 - **One unified telemetry schema** (`models.TelemetryRecord`) is written by both
@@ -46,8 +46,8 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"        # add ".[claude]" / ".[openai]" for LLM phrasing
 (cd frontend && npm install)
 
-.venv/bin/hauswatt seed                 # load the dataset into data.db (~140k rows)
-.venv/bin/hauswatt serve --port 8000  # FastAPI API backend on :8000
+.venv/bin/energyintelligence seed                 # load the dataset into data.db (~140k rows)
+.venv/bin/energyintelligence serve --port 8000  # FastAPI API backend on :8000
 (cd frontend && npm run dev)              # React frontend on :5173
 ```
 
@@ -55,7 +55,7 @@ Open <http://localhost:5173> and pick a household. In another terminal, stream
 live device data into it:
 
 ```bash
-.venv/bin/hauswatt sim --household HH-1001 --devices all --speed 60 --clock rebase
+.venv/bin/energyintelligence sim --household HH-1001 --devices all --speed 60 --clock rebase
 ```
 
 The status card ticks via SSE; the insights feed shows the heat-pump anomaly,
@@ -86,8 +86,8 @@ Default is a deterministic template phraser (no API key). To have an LLM phrase
 the insights instead:
 
 ```bash
-DARKENERGY_PHRASER_BACKEND=claude  ANTHROPIC_API_KEY=...  .venv/bin/hauswatt serve
-DARKENERGY_PHRASER_BACKEND=openai  OPENAI_API_KEY=...      .venv/bin/hauswatt serve
+DARKENERGY_PHRASER_BACKEND=claude  ANTHROPIC_API_KEY=...  .venv/bin/energyintelligence serve
+DARKENERGY_PHRASER_BACKEND=openai  OPENAI_API_KEY=...      .venv/bin/energyintelligence serve
 ```
 
 Both go through the same `Phraser` protocol and the same number-grounding
@@ -100,7 +100,7 @@ The dashboard chat uses the backend `/api/chat/{household_id}` endpoint. Set
 `OPENAI_API_KEY` before starting the backend to enable real LLM replies:
 
 ```bash
-OPENAI_API_KEY=... DARKENERGY_CHAT_MODEL=gpt-4o-mini .venv/bin/hauswatt serve --port 8000
+OPENAI_API_KEY=... DARKENERGY_CHAT_MODEL=gpt-4o-mini .venv/bin/energyintelligence serve --port 8000
 ```
 
 If no key is configured, the endpoint returns a deterministic fallback message
@@ -119,6 +119,6 @@ energy-balance invariant, and the phraser never surfaces an ungrounded number.
 ## Configuration
 
 All settings are environment variables prefixed `DARKENERGY_` (see
-`hauswatt/config.py`): `DB_PATH`, `DATASET_DIR`, `PHRASER_BACKEND`,
+`energyintelligence/config.py`): `DB_PATH`, `DATASET_DIR`, `PHRASER_BACKEND`,
 `CLAUDE_MODEL`, `OPENAI_MODEL`, `CHAT_MODEL`, `HOST`, `PORT`,
 `BALANCE_EPSILON_KW`.

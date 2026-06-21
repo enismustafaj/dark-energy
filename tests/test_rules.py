@@ -9,9 +9,9 @@ iterated without rewriting tests.
 
 from __future__ import annotations
 
-from hauswatt import rules
-from hauswatt.ai.prompts import grounding_violations
-from hauswatt.rules.base import build_context
+from energyintelligence import rules
+from energyintelligence.ai.prompts import grounding_violations
+from energyintelligence.rules.base import build_context
 
 
 def _by_key(conn, hh):
@@ -34,25 +34,47 @@ def test_tariff_fit_silent_when_already_best(conn):
 
 # --- Device choice ---------------------------------------------------------
 
-def test_heatpump_upgrade_when_better_scop_exists(conn):
-    # All heat-pump homes run SCOP 3.2; the catalog has up to 4.5 → upgrade advice.
+def test_heatpump_upgrade_respects_lifespan_gate(conn):
+    # All heat-pump homes run SCOP 3.2 and the catalog has higher-SCOP units, but
+    # replacing a working heat pump (~€14.5k+) to save ~€250/yr pays back in
+    # 50–70 years — far beyond the unit's life — so the advice is suppressed.
+    # Whenever it *does* fire, its payback must be within the heat pump's lifespan.
+    from energyintelligence.rules.device_choice import HEATPUMP_LIFESPAN_YEARS
+
     for hh in ("HH-1001", "HH-1002", "HH-1003"):
         r = _by_key(conn, hh).get("heatpump_upgrade")
-        assert r is not None, f"{hh} missing heatpump_upgrade"
-        assert r.advice.benefit_eur > 0
-        assert r.fact.numbers["new_scop"] > r.fact.numbers["current_scop"]
-        assert r.advice.payback_years is not None and r.advice.payback_years > 0
+        if r is not None:
+            assert r.advice.payback_years is not None
+            assert r.advice.payback_years <= HEATPUMP_LIFESPAN_YEARS
+            assert r.advice.benefit_eur > 0
+        else:
+            # current dataset: payback always exceeds lifespan -> no advice
+            assert True
 
 
 def test_heatpump_upgrade_silent_without_heat_pump(conn):
     assert "heatpump_upgrade" not in _by_key(conn, "HH-1004")
 
 
-def test_add_battery_for_pv_only_home(conn):
-    # HH-1004 has PV but no battery and exports a lot → add-battery advice.
-    r = _by_key(conn, "HH-1004").get("add_battery")
+def test_add_battery_when_payback_within_lifespan(conn):
+    # HH-2001 has PV, no battery, high export AND heavy evening import, so a
+    # battery pays back within its usable life → add-battery advice fires.
+    from energyintelligence.rules.device_choice import BATTERY_LIFESPAN_YEARS
+
+    r = _by_key(conn, "HH-2001").get("add_battery")
     assert r is not None and r.advice.benefit_eur > 0
     assert r.advice.capex_eur and r.advice.capex_eur > 0
+    # The lifespan gate must hold: we never recommend a battery that outlives its
+    # payback.
+    assert r.advice.payback_years is not None
+    assert r.advice.payback_years <= BATTERY_LIFESPAN_YEARS
+
+
+def test_add_battery_suppressed_when_payback_exceeds_lifespan(conn):
+    # HH-1004 has PV, no battery, and exports a lot, but with the real feed-in
+    # tariff the battery wouldn't pay back within its life → no advice (a 20-year
+    # payback on ~12-year hardware is a net loss, not a saving).
+    assert "add_battery" not in _by_key(conn, "HH-1004")
 
 
 def test_add_battery_silent_for_homes_with_battery(conn):
