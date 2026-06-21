@@ -57,7 +57,7 @@ const theme = createTheme({
   },
 });
 
-type Route = { name: "home" } | { name: "household"; householdId: string };
+type Route = { name: "home" } | { name: "household"; householdId: string } | { name: "watt" };
 
 type ActiveSelection = { type: "all" } | { type: "contract" } | { type: "device"; deviceId: number };
 
@@ -89,6 +89,7 @@ function agentGreeting(): ChatMsg {
 }
 
 function parseRoute(): Route {
+  if (window.location.pathname === "/watt") return { name: "watt" };
   const match = window.location.pathname.match(/^\/h\/([^/]+)$/);
   if (match) return { name: "household", householdId: decodeURIComponent(match[1]) };
   return { name: "home" };
@@ -155,6 +156,22 @@ function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  useEffect(() => {
+    if (opening) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      if (typing || event.metaKey || event.ctrlKey || event.altKey || event.key !== "1") return;
+      event.preventDefault();
+      navigate("/watt");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [opening]);
+
   return (
     <MantineProvider theme={theme} forceColorScheme="light">
       {showIntro && (
@@ -170,11 +187,30 @@ function App() {
         <>
           <Topbar />
           <Container size="lg" py="lg" className="app-main">
-            {route.name === "home" ? <HouseholdPicker /> : <Dashboard householdId={route.householdId} />}
+            {route.name === "home" ? (
+              <HouseholdPicker />
+            ) : route.name === "watt" ? (
+              <WattPage />
+            ) : (
+              <Dashboard householdId={route.householdId} />
+            )}
           </Container>
         </>
       )}
     </MantineProvider>
+  );
+}
+
+function WattPage() {
+  return (
+    <main className="watt-page" aria-label="Understand the watts you do not know">
+      <div className="watt-line">
+        <span>understand</span>
+        <span>the</span>
+        <span className="watt-word">watts</span>
+        <span>you don't know.</span>
+      </div>
+    </main>
   );
 }
 
@@ -201,29 +237,36 @@ function PreSplash({ onStart }: { onStart: () => void }) {
 }
 
 // Pitch splash that opens the app: "ei" expands into "energy intelligence",
-// the tagline fades in, then it auto-advances into the household list.
+// then waits on the full logo + tagline before entering the household list.
 function LandingSplash({ onEnter }: { onEnter: () => void }) {
   // Animation phases:
-  //  - "open": the wordmark expands "ei" -> "energy intelligence" + bolt
-  //  - "reveal": the tagline + hint fade in underneath
+  //  - "reveal": the wordmark expands "ei" -> "energy intelligence" + tagline
   //  - "leaving": fade the whole splash out before unmounting
   const [phase, setPhase] = useState<"seed" | "open" | "reveal" | "leaving">("seed");
+  const [canExit, setCanExit] = useState(false);
 
   useEffect(() => {
-    // Hold "E I" on its own for a beat so the seed letters read clearly, then
-    // trigger the open transition that expands them into the full wordmark.
-    const tOpen = setTimeout(() => setPhase("open"), 700);
-    const tReveal = setTimeout(() => setPhase("reveal"), 2400);
-    const tLeave = setTimeout(() => setPhase("leaving"), 4000);
-    // Unmount after the 0.4s fade-out completes.
-    const tDone = setTimeout(onEnter, 4400);
-    return () => {
-      clearTimeout(tOpen);
-      clearTimeout(tReveal);
-      clearTimeout(tLeave);
-      clearTimeout(tDone);
+    const tReveal = window.setTimeout(() => setPhase("reveal"), 80);
+    const tCanExit = window.setTimeout(() => setCanExit(true), 2600);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!canExit) return;
+      event.preventDefault();
+      setPhase((current) => {
+        if (current === "open" || current === "reveal") {
+          window.setTimeout(onEnter, 400);
+          return "leaving";
+        }
+        return current;
+      });
     };
-  }, [onEnter]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(tReveal);
+      window.clearTimeout(tCanExit);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [canExit, onEnter]);
 
   const open = phase === "open" || phase === "reveal" || phase === "leaving";
   const revealed = phase === "reveal" || phase === "leaving";
@@ -439,6 +482,7 @@ function Dashboard({ householdId }: { householdId: string }) {
     stream.addEventListener("action", (event) => {
       const data = JSON.parse((event as MessageEvent).data) as ActionEvent;
       const threadKey = data.resolved_fact_key ?? activeThreadKeyRef.current;
+      const completed = data.status === "executed";
       if (data.resolved_fact_key) {
         setView((prev) =>
           prev ? { ...prev, advice: prev.advice.filter((item) => item.fact_key !== data.resolved_fact_key) } : prev,
@@ -454,7 +498,9 @@ function Dashboard({ householdId }: { householdId: string }) {
       }
       pushMsg(threadKey, {
         role: "agent",
-        text: data.message,
+        text: completed
+          ? `${data.label} is completed. I closed this recommendation. ${data.message}`
+          : data.message,
         savings: data.expected_savings_eur,
         status: data.status,
       });
@@ -491,6 +537,9 @@ function Dashboard({ householdId }: { householdId: string }) {
   const chatMessages = activeThread?.messages ?? [];
   const activeRecommendationFactKey = activeThread?.factKey;
   const activeThreadResolved = Boolean(activeThread?.resolved);
+  const activeRecommendation = activeRecommendationFactKey
+    ? openAdvice.find((item) => item.fact_key === activeRecommendationFactKey)
+    : undefined;
 
   function pushMsg(threadKey: string, m: Omit<ChatMsg, "id">) {
     setChatThreads((prev) => {
@@ -521,6 +570,47 @@ function Dashboard({ householdId }: { householdId: string }) {
       pushMsg(recommendationFactKey ?? activeThreadKey, {
         role: "agent",
         text: err instanceof Error ? err.message : "That action isn't available.",
+        status: "failed",
+      });
+    }
+  }
+
+  function directActionIntro(item: Advice): string {
+    const label = item.action_label || "the available action";
+    return `I'm applying "${label}" now. The control action is being sent and I'll report the result here.`;
+  }
+
+  function closeRecommendationLocally(item: Advice) {
+    setView((prev) =>
+      prev ? { ...prev, advice: prev.advice.filter((entry) => entry.fact_key !== item.fact_key) } : prev,
+    );
+    setChatThreads((prev) => {
+      const existing = prev[item.fact_key];
+      return {
+        ...prev,
+        [item.fact_key]: {
+          title: existing?.title ?? item.action_label ?? item.title,
+          factKey: item.fact_key,
+          resolved: true,
+          messages: existing?.messages ?? [],
+        },
+      };
+    });
+  }
+
+  function beginDirectAction(item: Advice, userText: string) {
+    ensureRecommendationThread(item);
+    setChatOpen(true);
+    setActiveThreadKey(item.fact_key);
+    closeRecommendationLocally(item);
+    pushMsg(item.fact_key, { role: "user", text: userText });
+    pushMsg(item.fact_key, { role: "agent", text: directActionIntro(item) });
+    if (item.agent_actionable && item.action_type) {
+      runAgentAction(item.action_type, item.fact_key);
+    } else {
+      pushMsg(item.fact_key, {
+        role: "agent",
+        text: "That recommendation does not have a direct device-control action available.",
         status: "failed",
       });
     }
@@ -575,13 +665,10 @@ function Dashboard({ householdId }: { householdId: string }) {
   }
 
   function handleRecommendation(item: Advice) {
-    ensureRecommendationThread(item);
-    askAgent(`Execute the mocked action for this recommendation now. Do not ask for confirmation.\n\n${item.title}\n\n${recommendationSpec(item)}`, item.fact_key)
-      .then(() => {
-        if (item.agent_actionable && item.action_type) {
-          runAgentAction(item.action_type, item.fact_key);
-        }
-      });
+    beginDirectAction(
+      item,
+      `Execute the action for this recommendation now.\n\n${item.title}\n\n${recommendationSpec(item)}`,
+    );
   }
 
   async function handleResolveAdvice(item: Advice) {
@@ -619,12 +706,23 @@ function Dashboard({ householdId }: { householdId: string }) {
   // called when the user types into the chat
   function handleChatSubmit(text: string) {
     const lc = text.toLowerCase();
+    const directActionRequested = /\b(apply|execute|run|do|start|schedule|book|switch|shift|charge|optimi[sz]e|fix)\b/.test(lc);
     const match = actionOptions.find(
       (o) =>
         lc.includes(o.type.replace(/_/g, " ")) ||
         lc.includes(o.label.toLowerCase()) ||
         o.label.toLowerCase().split(/\s+/).some((w) => w.length > 3 && lc.includes(w)),
     );
+    const directItem =
+      directActionRequested && activeRecommendation?.agent_actionable
+        ? activeRecommendation
+        : directActionRequested && match?.factKey
+          ? openAdvice.find((item) => item.fact_key === match.factKey)
+          : undefined;
+    if (directItem) {
+      beginDirectAction(directItem, text);
+      return;
+    }
     const threadFactKey = activeRecommendationFactKey ?? match?.factKey;
     askAgent(text, threadFactKey);
   }
@@ -1430,27 +1528,26 @@ function ChatPanel({
                   <div className="bubble-text">Thinking...</div>
                 </div>
               )}
-              {disabled && (
-                <div className="bubble agent">
-                  <div className="bubble-text">This recommendation is resolved. The thread is read-only.</div>
-                </div>
-              )}
             </div>
 
-            <form className="chat-input" onSubmit={submit}>
-              <TextInput
-                value={text}
-                onChange={(e) => setText(e.currentTarget.value)}
-                placeholder={disabled ? "Resolved" : "Ask about this recommendation..."}
-                disabled={busy || disabled}
-                size="sm"
-                radius="md"
-                style={{ flex: 1 }}
-              />
-              <ActionIcon type="submit" size={36} radius="md" color="energy" variant="filled" aria-label="Send" loading={busy} disabled={disabled}>
-                <Send size={16} />
-              </ActionIcon>
-            </form>
+            {disabled ? (
+              <div className="chat-readonly">Recommendation closed · Thread read-only</div>
+            ) : (
+              <form className="chat-input" onSubmit={submit}>
+                <TextInput
+                  value={text}
+                  onChange={(e) => setText(e.currentTarget.value)}
+                  placeholder="Ask about this recommendation..."
+                  disabled={busy}
+                  size="sm"
+                  radius="md"
+                  style={{ flex: 1 }}
+                />
+                <ActionIcon type="submit" size={36} radius="md" color="energy" variant="filled" aria-label="Send" loading={busy}>
+                  <Send size={16} />
+                </ActionIcon>
+              </form>
+            )}
           </div>
 
           <div className="chat-threads">
