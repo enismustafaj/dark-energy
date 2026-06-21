@@ -143,9 +143,11 @@ function accentVar(advice: Advice): string {
 
 function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute());
-  // Pitch splash: shown every time the home/root route is loaded; auto-advances
-  // into the household list after ~2s. Deep links into a household skip it.
-  const [showSplash, setShowSplash] = useState<boolean>(() => route.name === "home");
+  // Pitch intro: a tap-to-start screen precedes the animated wordmark. Deep
+  // links into a household skip both overlays.
+  const [showIntro, setShowIntro] = useState<boolean>(() => route.name === "home");
+  const [showSplash, setShowSplash] = useState<boolean>(false);
+  const opening = showIntro || showSplash;
 
   useEffect(() => {
     const onPop = () => setRoute(parseRoute());
@@ -155,12 +157,46 @@ function App() {
 
   return (
     <MantineProvider theme={theme} forceColorScheme="light">
+      {showIntro && (
+        <PreSplash
+          onStart={() => {
+            setShowIntro(false);
+            setShowSplash(true);
+          }}
+        />
+      )}
       {showSplash && <LandingSplash onEnter={() => setShowSplash(false)} />}
-      <Topbar />
-      <Container size="lg" py="lg" className="app-main">
-        {route.name === "home" ? <HouseholdPicker /> : <Dashboard householdId={route.householdId} />}
-      </Container>
+      {!opening && (
+        <>
+          <Topbar />
+          <Container size="lg" py="lg" className="app-main">
+            {route.name === "home" ? <HouseholdPicker /> : <Dashboard householdId={route.householdId} />}
+          </Container>
+        </>
+      )}
     </MantineProvider>
+  );
+}
+
+function PreSplash({ onStart }: { onStart: () => void }) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      event.preventDefault();
+      onStart();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onStart]);
+
+  return (
+    <div className="pre-splash" aria-label="EnergyIntelligence opening screen">
+      <div className="pre-loader" aria-hidden>
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
   );
 }
 
