@@ -36,7 +36,7 @@ from ..ingest.mapping import reading_to_record, merge_into_record
 from ..models import DeviceReading, TelemetryRecord
 from .service import household_view, recompute_advice
 
-app = FastAPI(title="HausWatt")
+app = FastAPI(title="EnergyIntelligence")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

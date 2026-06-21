@@ -1,4 +1,4 @@
-# HausWatt — Capability Spec
+# EnergyIntelligence — Capability Spec
 
 > A living spec for the customer **intelligence layer** over residential energy
 > telemetry. Reflects what exists today (the thin slice) and is structured so
@@ -68,7 +68,7 @@ realistic capex/savings).
 
 ## 1. Product summary
 
-HausWatt turns per-device energy data (PV, battery, heat pump, EV, household
+EnergyIntelligence turns per-device energy data (PV, battery, heat pump, EV, household
 load) into **forecasts, anomaly detection, and AI-phrased, actionable advice**,
 delivered to a per-household customer dashboard with live updates and one-tap
 actions. The platform is the technical starting point — built as a complete but

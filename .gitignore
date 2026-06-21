@@ -1,4 +1,4 @@
-# HausWatt runtime database (built by `energyintelligence seed`)
+# EnergyIntelligence runtime database (built by `energyintelligence seed`)
 data.db
 data.db-wal
 data.db-shm

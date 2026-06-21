@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 300" role="img" aria-label="EnergyIntelligence logo">
+  <title>EnergyIntelligence</title>
+  <desc>EnergyIntelligence wordmark in gray with a gold lightning bolt in the middle.</desc>
+  <g font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-weight="600" font-size="140" letter-spacing="1" fill="#989898" transform="matrix(1.012296, 0, 0, 1, 82.190628, -247.374619)" style="">
+    <text x="40" y="450" text-anchor="start" style="white-space: pre;">ENERGY</text>
+    <text x="418" y="450.496" text-anchor="start" style="white-space: pre;">        INTELLIGENCE</text>
+  </g>
+  <path d="M 816.053 42.334 L 717.87 150.558 L 771.424 150.558 L 718.986 257.666 L 824.978 126.012 L 771.424 126.012 L 816.053 42.334 Z" fill="#EFB60A" style=""/>
+</svg>

@@ -84,7 +84,7 @@ function agentGreeting(): ChatMsg {
   return {
     id: "greet",
     role: "agent",
-    text: "Hi — I'm your HausWatt agent. Pick a recommendation to start a dedicated thread, or ask me about this household.",
+    text: "Hi — I'm your EnergyIntelligence agent. Pick a recommendation to start a dedicated thread, or ask me about this household.",
   };
 }
 
@@ -143,6 +143,9 @@ function accentVar(advice: Advice): string {
 
 function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute());
+  // Pitch splash: shown every time the home/root route is loaded; auto-advances
+  // into the household list after ~2s. Deep links into a household skip it.
+  const [showSplash, setShowSplash] = useState<boolean>(() => route.name === "home");
 
   useEffect(() => {
     const onPop = () => setRoute(parseRoute());
@@ -152,11 +155,66 @@ function App() {
 
   return (
     <MantineProvider theme={theme} forceColorScheme="light">
+      {showSplash && <LandingSplash onEnter={() => setShowSplash(false)} />}
       <Topbar />
       <Container size="lg" py="lg" className="app-main">
         {route.name === "home" ? <HouseholdPicker /> : <Dashboard householdId={route.householdId} />}
       </Container>
     </MantineProvider>
+  );
+}
+
+// Pitch splash that opens the app: "ei" expands into "energy intelligence",
+// the tagline fades in, then it auto-advances into the household list.
+function LandingSplash({ onEnter }: { onEnter: () => void }) {
+  // Animation phases:
+  //  - "open": the wordmark expands "ei" -> "energy intelligence" + bolt
+  //  - "reveal": the tagline + hint fade in underneath
+  //  - "leaving": fade the whole splash out before unmounting
+  const [phase, setPhase] = useState<"seed" | "open" | "reveal" | "leaving">("seed");
+
+  useEffect(() => {
+    // Hold "E I" on its own for a beat so the seed letters read clearly, then
+    // trigger the open transition that expands them into the full wordmark.
+    const tOpen = setTimeout(() => setPhase("open"), 700);
+    const tReveal = setTimeout(() => setPhase("reveal"), 2400);
+    const tLeave = setTimeout(() => setPhase("leaving"), 4000);
+    // Unmount after the 0.4s fade-out completes.
+    const tDone = setTimeout(onEnter, 4400);
+    return () => {
+      clearTimeout(tOpen);
+      clearTimeout(tReveal);
+      clearTimeout(tLeave);
+      clearTimeout(tDone);
+    };
+  }, [onEnter]);
+
+  const open = phase === "open" || phase === "reveal" || phase === "leaving";
+  const revealed = phase === "reveal" || phase === "leaving";
+
+  return (
+    <div className={`splash${phase === "leaving" ? " leaving" : ""}`} aria-label="EnergyIntelligence">
+      <div className={`splash-mark${open ? " open" : ""}`}>
+        <span className="splash-word">
+          <span className="splash-seed">e</span>
+          <span className="splash-rest">nergy</span>
+        </span>
+        <span className="splash-bolt" aria-hidden>
+          <svg viewBox="278 280 240 240" width="64" height="64">
+            <path
+              d="M 442.649 292.334 L 344.466 400.558 L 398.02 400.558 L 345.582 507.666 L 451.574 376.012 L 398.02 376.012 L 442.649 292.334 Z"
+              fill="#EFB60A"
+            />
+          </svg>
+        </span>
+        <span className="splash-word">
+          <span className="splash-seed">i</span>
+          <span className="splash-rest">ntelligence</span>
+        </span>
+      </div>
+
+      <div className={`splash-tag${revealed ? " show" : ""}`}>Own your watts</div>
+    </div>
   );
 }
 
@@ -166,7 +224,7 @@ function Topbar() {
       <Container size="lg" h="100%">
         <Group h="100%" justify="space-between">
           <Group gap={10} className="brand" onClick={() => navigate("/")} role="button">
-            <img src="/energyintelligence-wordmark.svg" alt="HausWatt" className="logo-wordmark" />
+            <img src="/logo.svg" alt="EnergyIntelligence" className="logo-wordmark" />
             <Text c="dimmed" fz={12} visibleFrom="sm">
               Less cost. More loyalty. Zero disruption.
             </Text>
@@ -1310,7 +1368,7 @@ function ChatPanel({
                 {title}
               </Text>
               <Text c="dimmed" fz={11}>
-                HausWatt agent
+                EnergyIntelligence agent
               </Text>
             </div>
           </Group>

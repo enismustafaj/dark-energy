@@ -1,9 +1,9 @@
-# HausWatt
+# EnergyIntelligence
 
 A customer **intelligence layer** over residential energy telemetry.
 *Less cost. More loyalty. Zero disruption.*
 
-HausWatt turns per-device energy data (PV, battery, heat pump, EV, household
+EnergyIntelligence turns per-device energy data (PV, battery, heat pump, EV, household
 load) into **forecasts, anomaly detection, and AI-phrased, actionable advice**,
 served through an API for a separate per-household dashboard with live updates.
 
@@ -78,7 +78,7 @@ npm run build     # production bundle in frontend/dist
 For a deployed frontend served from a different origin, set
 `VITE_API_BASE_URL` to the backend origin before building. For local dev, the
 Vite proxy now defaults to `http://127.0.0.1:8000`; override it with
-`HAUSWATT_API_ORIGIN` if you need a different backend target.
+`EI_API_ORIGIN` if you need a different backend target.
 
 ## AI phrasing backends
 

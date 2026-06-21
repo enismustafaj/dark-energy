@@ -54,7 +54,7 @@ def _cmd_sim(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="energyintelligence", description="HausWatt CLI")
+    p = argparse.ArgumentParser(prog="energyintelligence", description="EnergyIntelligence CLI")
     sub = p.add_subparsers(dest="command", required=True)
 
     sp = sub.add_parser("seed", help="Load the dataset into SQLite")
